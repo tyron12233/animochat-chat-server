@@ -95,6 +95,9 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         room.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(notification);
+
+                // close the connection for the remaining user.
+                client.close(1000, 'Partner disconnected');
             }
         });
 
