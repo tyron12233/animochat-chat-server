@@ -70,9 +70,6 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     // --- Message Handling ---
     // Set up a listener for messages coming from this specific client.
     ws.on('message', (message: Buffer) => {
-        // We use a Buffer to handle binary data, but convert to string for logging.
-        console.log(`[${chatId}] Received message from '${userId}': ${message.toString()}`);
-
         // Relay the message to the other client in the room.
         room.forEach(client => {
             // Check if the client is not the sender and the connection is still open.
