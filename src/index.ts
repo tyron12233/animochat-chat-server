@@ -3,6 +3,7 @@ import { URL } from 'url';
 import http from 'http';
 import express from 'express'; // Import express
 import { IncomingMessage } from 'http';
+import cors from 'cors'; 
 
 const CHAT_SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 
@@ -15,6 +16,8 @@ const chatRooms = new Map<string, Set<WebSocket>>();
 
 // --- Express App Setup ---
 const app = express();
+
+app.use(cors());
 
 // This is our new status endpoint using Express.
 app.get('/status', (req, res) => {
@@ -117,15 +120,17 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         console.log(`[${chatId}] User '${userId}' disconnected.`);
         room.delete(ws);
         
-        const notification = JSON.stringify({ type: 'STATUS', message: 'Your partner has disconnected.' });
+        const notification = JSON.stringify({ type: 'STATUS', message: 'Your partner has went offline.' });
+
+        // notify remaininf participants
         room.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(notification);
-                client.close(1000, 'Partner disconnected');
             }
         });
 
         if (room.size === 0) {
+            // closing the room for now, but in the future we should consider keeping it open for a while to allow reconnections.
             console.log(`[${chatId}] Room is now empty and has been closed.`);
             chatRooms.delete(chatId);
         }
@@ -137,7 +142,8 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     });
 });
 
-// Start the HTTP server, which now handles both protocols.
+
+
 server.listen(CHAT_SERVER_PORT, () => {
     console.log(`Express and WebSocket Server is running on port ${CHAT_SERVER_PORT}`);
     console.log(`WebSocket connections at ws://localhost:${CHAT_SERVER_PORT}`);
