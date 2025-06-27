@@ -1,61 +1,98 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { URL } from 'url';
+import http from 'http';
+import express from 'express'; // Import express
 import { IncomingMessage } from 'http';
 
 const CHAT_SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 
 /**
  * This Map stores the chat rooms.
- * The key is the 'chatId', a unique identifier for a chat session between two users.
+ * The key is the 'chatId', a unique identifier for a chat session.
  * The value is a Set of WebSocket connections for the users in that chat room.
- * A Set is used because it simplifies adding/removing connections and ensures no duplicates.
  */
 const chatRooms = new Map<string, Set<WebSocket>>();
 
-// Create a new WebSocket server instance.
-const wss = new WebSocketServer({ port: CHAT_SERVER_PORT });
+// --- Express App Setup ---
+const app = express();
 
-/**
- * This is the main connection handler for the WebSocket server.
- * It fires every time a new client attempts to establish a WebSocket connection.
- */
-wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    // The initial HTTP request ('req') is used to get connection parameters.
-    // We expect the client to provide 'userId' and 'chatId' in the URL.
-    // e.g., ws://localhost:8080?userId=user-abc&chatId=interest-xyz-123
-    const url = new URL(req.url!, `http://${req.headers.host}`);
+// This is our new status endpoint using Express.
+app.get('/status', (req, res) => {
+    // Prepare the status data.
+    const roomsStatus = {
+        totalRooms: chatRooms.size,
+        rooms: Array.from(chatRooms.entries()).map(([chatId, connections]) => ({
+            chatId,
+            participants: connections.size,
+        })),
+    };
+
+    // Send the status data as a JSON response using Express's json method.
+    res.json(roomsStatus);
+});
+
+// Create a standard HTTP server from the Express app.
+// This allows us to share the same server for both Express routes and WebSocket connections.
+const server = http.createServer(app);
+
+
+// --- WebSocket Server Setup ---
+// Create a new WebSocket server instance without a dedicated port.
+// It will be integrated with our existing HTTP server.
+const wss = new WebSocketServer({ noServer: true });
+
+// Listen for the 'upgrade' event on the HTTP server.
+// This is where an HTTP connection is "upgraded" to a WebSocket connection.
+server.on('upgrade', (request, socket, head) => {
+    // The original request URL is needed to extract chatId and userId.
+    const url = new URL(request.url!, `http://${request.headers.host}`);
     const chatId = url.searchParams.get('chatId');
     const userId = url.searchParams.get('userId');
 
+    // Basic validation before upgrading.
     if (!chatId || !userId) {
-        console.error('Connection rejected: chatId and userId parameters are required.');
-        // Close the connection with a specific error code and reason.
-        ws.close(1008, 'Chat ID and User ID are required.');
+        // If validation fails, destroy the socket to prevent the connection.
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        socket.destroy();
         return;
     }
+
+    // If validation passes, let the WebSocket server handle the handshake.
+    wss.handleUpgrade(request, socket, head, (ws) => {
+        // The 'connection' event is then emitted for the successfully upgraded WebSocket.
+        wss.emit('connection', ws, request);
+    });
+});
+
+
+/**
+ * This is the main connection handler for the WebSocket server.
+ * It fires every time a new client establishes a WebSocket connection.
+ */
+wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    // The initial HTTP request ('req') is used to get connection parameters.
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const chatId = url.searchParams.get('chatId')!; // We know these exist from the 'upgrade' check
+    const userId = url.searchParams.get('userId')!;
 
     console.log(`[${chatId}] User '${userId}' attempting to connect...`);
 
     // --- Room Management ---
-    // If a room for this chatId doesn't exist, create one.
     if (!chatRooms.has(chatId)) {
         chatRooms.set(chatId, new Set<WebSocket>());
     }
 
     const room = chatRooms.get(chatId)!;
 
-    // Reject connections if the room is already full (i.e., has 2 participants).
     if (room.size >= 2) {
         console.error(`[${chatId}] Connection rejected for '${userId}': Room is full.`);
         ws.close(1008, 'Chat room is already full.');
         return;
     }
 
-    // Add the new user's WebSocket connection to the room.
     room.add(ws);
     console.log(`[${chatId}] User '${userId}' connected successfully. Room size: ${room.size}.`);
     
-    // If the room is now full, notify both users that their partner has connected.
     if(room.size === 2) {
         console.log(`[${chatId}] Room is now full. Notifying participants.`);
         const notification = JSON.stringify({ type: 'STATUS', message: 'Your partner has connected. You can now chat!' });
@@ -66,13 +103,9 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         });
     }
 
-
     // --- Message Handling ---
-    // Set up a listener for messages coming from this specific client.
     ws.on('message', (message: Buffer) => {
-        // Relay the message to the other client in the room.
         room.forEach(client => {
-            // Check if the client is not the sender and the connection is still open.
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
@@ -80,25 +113,18 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     });
 
     // --- Disconnection Handling ---
-    // Set up a listener for when this client's connection closes.
     ws.on('close', () => {
         console.log(`[${chatId}] User '${userId}' disconnected.`);
-        
-        // Remove the user from the room.
         room.delete(ws);
         
-        // Notify the remaining user (if any) that their partner has left.
         const notification = JSON.stringify({ type: 'STATUS', message: 'Your partner has disconnected.' });
         room.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(notification);
-
-                // close the connection for the remaining user.
                 client.close(1000, 'Partner disconnected');
             }
         });
 
-        // If the room is now empty, delete it from the map to clean up memory.
         if (room.size === 0) {
             console.log(`[${chatId}] Room is now empty and has been closed.`);
             chatRooms.delete(chatId);
@@ -111,4 +137,9 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     });
 });
 
-console.log(`WebSocket Chat Server is running on ws://localhost:${CHAT_SERVER_PORT}`);
+// Start the HTTP server, which now handles both protocols.
+server.listen(CHAT_SERVER_PORT, () => {
+    console.log(`Express and WebSocket Server is running on port ${CHAT_SERVER_PORT}`);
+    console.log(`WebSocket connections at ws://localhost:${CHAT_SERVER_PORT}`);
+    console.log(`Check status at http://localhost:${CHAT_SERVER_PORT}/status`);
+});
