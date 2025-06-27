@@ -96,6 +96,7 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     room.add(ws);
     console.log(`[${chatId}] User '${userId}' connected successfully. Room size: ${room.size}.`);
     
+
     if(room.size === 2) {
         console.log(`[${chatId}] Room is now full. Notifying participants.`);
         const notification = JSON.stringify({ type: 'STATUS', message: 'Your partner has connected. You can now chat!' });
