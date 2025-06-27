@@ -7,6 +7,18 @@ import cors from 'cors';
 
 const CHAT_SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 
+// should be the same as the one used in the client
+// copy pasted for now, but could be moved to a shared file later
+type Packet<T, K extends string> = {
+  type: K;
+  content: T;
+  sender: string;
+};
+
+// This packet is used when the user is offline or not connected.
+// the content is a string (the user id of the user who when offline).
+type OfflinePacket = Packet<string, "offline">;
+
 /**
  * An extended WebSocket type that includes chat-specific information.
  * This helps in identifying the user and chat room associated with a connection,
@@ -145,7 +157,7 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         room.forEach((connectionSet) => {
             connectionSet.forEach(client => {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
-                    client.send(message.toString()); // Ensure message is sent as string
+                    client.send(message.toString()); 
                 }
             });
         });
@@ -172,11 +184,15 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
             room.delete(chatWs.userId);
 
             // Notify the remaining participants that a user has gone offline.
-            const notification = JSON.stringify({ type: 'STATUS', message: `User ${chatWs.userId} has gone offline.` });
+            const packet: OfflinePacket = {
+                type: 'offline',
+                content: chatWs.userId,
+                sender: chatWs.userId,
+            };
             room.forEach(connectionSet => {
                 connectionSet.forEach(client => {
                     if (client.readyState === WebSocket.OPEN) {
-                        client.send(notification);
+                        client.send(JSON.stringify(packet));
                     }
                 });
             });
