@@ -12,29 +12,25 @@ const CHAT_SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 808
 const DISCOVERY_SERVER_URL = process.env.DISCOVERY_SERVER_URL || 'https://animochat-service-discovery.onrender.com';
 const SERVICE_NAME = 'chat-service';
 const SERVICE_VERSION = '1.0.0';
+const SERVICE_URL = process.env.SERVICE_URL || `http://localhost:${CHAT_SERVER_PORT}`;
 
 const registerService = async () => {
     try {
         const response = await fetch(`${DISCOVERY_SERVER_URL}/register`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 serviceName: SERVICE_NAME,
                 version: SERVICE_VERSION,
-                url: process.env.SERVICE_URL!
+                url: SERVICE_URL,
             }),
         });
-
-        // fetch doesn't throw on bad HTTP status, so we check response.ok
         if (!response.ok) {
-            throw new Error(`Failed to register service. Status: ${response.status}`);
+            throw new Error(`Failed to register service. Status: ${response.status} ${await response.text()}`);
         }
-
-        console.log('Service registered/heartbeat sent successfully.');
+        console.log('Service registered/heartbeat sent successfully to discovery server.');
     } catch (error) {
-        console.error('Failed to register service:', error);
+        console.error('Failed to register service:', (error as Error).message);
     }
 };
 
@@ -42,24 +38,21 @@ const unregisterService = async () => {
     try {
         const response = await fetch(`${DISCOVERY_SERVER_URL}/unregister`, {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 serviceName: SERVICE_NAME,
                 version: SERVICE_VERSION,
             }),
         });
-        
         if (!response.ok) {
             throw new Error(`Failed to unregister service. Status: ${response.status}`);
         }
-
-        console.log('Service unregistered successfully.');
+        console.log('Service unregistered successfully from discovery server.');
     } catch (error) {
-        console.error('Failed to unregister service:', error);
+        console.error('Failed to unregister service:', (error as Error).message);
     }
 };
+
 
 /**
  * This Map stores the active chat rooms.
