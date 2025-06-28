@@ -4,7 +4,7 @@ import http from "http";
 import express from "express";
 import { IncomingMessage } from "http";
 import cors from "cors";
-import type { ChangeThemePacket, ChatThemeV2, OfflinePacket } from "./types";
+import type { ChangeThemePacket, ChatThemeV2, MessagesSyncPacket, OfflinePacket } from "./types";
 import { ChatRoom, type ChatWebSocket } from "./chat-room";
 import os from "os";
 
@@ -131,6 +131,25 @@ app.get("/status", (req, res) => {
   res.json(roomsStatus);
 });
 
+// message sync endpoint
+app.get("/sync/:chatId", (req, res) => {
+  const chatId = req.params.chatId;
+  const room = chatRooms.get(chatId);
+
+  if (!room) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  const messagesSyncPacket: MessagesSyncPacket = {
+    type: "messages_sync",
+    sender: "system",
+    content: room.messages,
+  };
+
+  res.json(messagesSyncPacket);
+});
+
 // --- WebSocket Upgrade Handling ---
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url!, `http://${request.headers.host}`);
@@ -170,7 +189,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   }
   const room = chatRooms.get(chatId)!;
 
-  if (room.theme) {
+  if (isExistingRoom && room.theme) {
     const packet: ChangeThemePacket = {
       type: "change_theme",
       content: {
@@ -219,9 +238,10 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     if (packet.type === "change_theme") {
       room.setTheme(packet.content.theme);
       room.setMode(packet.content.mode);
+    } else if (packet.type === "message") {
+      room.messages.push(packet.content); 
     }
 
-    // Broadcast the message to other clients in the room.
     room.broadcast(chatWs, parsedMessage);
   });
 

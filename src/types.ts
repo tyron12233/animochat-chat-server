@@ -40,6 +40,7 @@ export interface UserMessage extends BaseMessage {
 
 export type Message = UserMessage | SystemMessage;
 
+export type MessagesSyncPacket = Packet<Message[], "messages_sync">;
 export type MessagePacket = Packet<UserMessage, "message">;
 export type ReactionPacket = Packet<Reaction, "reaction">;
 export type TypingPacket = Packet<boolean, "typing">;

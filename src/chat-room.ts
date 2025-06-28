@@ -1,5 +1,5 @@
 import WebSocket from "ws";
-import type { ChatThemeV2, OfflinePacket } from "./types";
+import type { ChatThemeV2, Message, OfflinePacket } from "./types";
 
 export interface ChatWebSocket extends WebSocket {
     userId: string;
@@ -12,6 +12,8 @@ export class ChatRoom {
     public mode: 'light' | 'dark' = 'light';
     // Map<userId, Set<WebSocketConnections>>
     private participants: Map<string, Set<WebSocket>>;
+
+    public messages: Message[] = [];
 
      constructor(chatId: string) {
         this.chatId = chatId;
