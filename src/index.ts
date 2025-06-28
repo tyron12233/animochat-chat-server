@@ -23,7 +23,7 @@ const registerService = async () => {
             body: JSON.stringify({
                 serviceName: SERVICE_NAME,
                 version: SERVICE_VERSION,
-                port: CHAT_SERVER_PORT,
+                url: process.env.SERVICE_URL!
             }),
         });
 
