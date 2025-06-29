@@ -10,6 +10,7 @@ import type {
   ChatThemeV2,
   MessagesSyncPacket,
   OfflinePacket,
+  Participant,
   ParticipantsSyncPacket,
 } from "./types";
 import { ChatRoom, type ChatWebSocket } from "./chat-room";
@@ -134,6 +135,20 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     };
     ws.send(JSON.stringify(packet));
   }
+
+  const participants: Set<Omit<Participant, "connections">> = new Set();
+  room.participants.forEach((p) => {
+    participants.add({
+      userId: p.userId,
+      nickname: p.nickname,
+    })
+  });
+
+  room.nicknames.forEach((nickname, userId) => {
+    if (!participants.has({ userId, nickname })) {
+      participants.add({ userId, nickname });
+    }
+  });
 
   const participantsSync: ParticipantsSyncPacket = {
     type: "participants_sync",

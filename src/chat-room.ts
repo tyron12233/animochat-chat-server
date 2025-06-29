@@ -61,7 +61,7 @@ export class ChatRoom {
   public nicknames: Map<string, string> = new Map<string, string>();
 
   // Map<userId, Participant>
-  private participants: Map<string, Participant>;
+  public participants: Map<string, Participant>;
 
   constructor(chatId: string, name: string, maxParticipants: number = 2) {
     this.chatId = chatId;
