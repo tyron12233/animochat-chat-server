@@ -1,5 +1,5 @@
 import { Redis } from "ioredis";
-import type { Message, ChatThemeV2, Participant } from "./types";
+import type { Message, ChatThemeV2, Participant, ChatRoomInfo } from "./types";
 
 // Helper function for consistent key naming
 const roomKey = (chatId: string, suffix: string) => `chat:${chatId}:${suffix}`;
@@ -30,17 +30,61 @@ export class ChatRoomRepository {
     return (await this.redis.exists(key)) === 1;
   }
 
-  async listPublicRooms(): Promise<{ id: string; name: string }[]> {
-    // This is more complex with Redis. A common pattern is to have a set of all public room IDs.
-    const publicRoomIds = await this.redis.smembers("public_rooms");
-    const rooms = [];
-    for (const chatId of publicRoomIds) {
-      const name = await this.redis.hget(roomKey(chatId, "info"), "name");
-      if (name) {
-        rooms.push({ id: chatId, name });
-      }
+  async listPublicRooms(): Promise<{
+    id: string;
+    name: string;
+    max_participants: number;
+    participants: number;
+  }[]> {
+    const publicRoomIds = await this.redis.smembers('public_rooms');
+    
+    if (publicRoomIds.length === 0) {
+        return [];
     }
-    return rooms;
+
+    // Use Promise.all to fetch details for all rooms in parallel for efficiency
+    const rooms = await Promise.all(
+        publicRoomIds.map(async (chatId) => {
+            // A Redis pipeline batches commands to reduce network latency.
+            // We're asking for two things:
+            // 1. The 'name' and 'maxParticipants' fields from the room's info hash.
+            // 2. The current number of participants from the room's participants set.
+            const pipeline = this.redis.pipeline();
+            pipeline.hmget(roomKey(chatId, 'info'), 'name', 'maxParticipants');
+            pipeline.scard(roomKey(chatId, 'participants'));
+            
+            // Execute the pipeline
+            const results = await pipeline.exec();
+
+            // The pipeline returns an array of results, one for each command.
+            // Each result is in the format [error, value].
+            if (!results || results.length < 2 || !results[0] || !results[1]) {
+                console.error(`Failed to fetch details for room ${chatId}: pipeline results missing`);
+                return null;
+            }
+            const [hmgetError, hmgetResult] = results[0];
+            const [scardError, scardResult] = results[1];
+
+            if (hmgetError || scardError) {
+                console.error(`Failed to fetch details for room ${chatId}`, hmgetError || scardError);
+                return null; // Skip this room if there's an error
+            }
+
+            const [name, maxParticipantsStr] = hmgetResult as [string, string];
+            const participants = scardResult as number;
+            
+            // Return the object in the desired format
+            return {
+                id: chatId,
+                name: name || 'Unnamed Room',
+                max_participants: parseInt(maxParticipantsStr, 10) || 2,
+                participants: participants,
+            };
+        })
+    );
+
+    // Filter out any null results (rooms that failed to fetch)
+    return rooms.filter((room) => room !== null);
   }
 
   async makeRoomPublic(chatId: string) {
