@@ -152,7 +152,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
   const participantsSync: ParticipantsSyncPacket = {
     type: "participants_sync",
-    content: room.getInfo().participants,
+    content: Array.from(participants),
     sender: "system",
   };
   ws.send(JSON.stringify(participantsSync));
