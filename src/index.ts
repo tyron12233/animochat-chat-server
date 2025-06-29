@@ -331,5 +331,5 @@ server.listen(CHAT_SERVER_PORT, () => {
   );
   console.log(`Check status at http://localhost:${CHAT_SERVER_PORT}/status`);
 
-  // startServiceRegistration();
+  startServiceRegistration();
 });
