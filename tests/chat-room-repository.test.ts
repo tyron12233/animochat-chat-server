@@ -203,6 +203,16 @@ describe('ChatRoomRepository', () => {
         expect(theme).toBeNull();
     });
 
+
+    it('should properly retrn a valid object', async () => {
+          await repo.setTheme(testChatId, sampleTheme, 'dark');
+
+          const { theme, mode } = await repo.getTheme(testChatId);
+
+          expect(theme).toEqual(sampleTheme);
+          expect(mode).toBe('dark');
+    })
+
     // Use test.each to run the same test for different corrupted data inputs
     test.each([
         ['[object Object]'],
@@ -222,5 +232,7 @@ describe('ChatRoomRepository', () => {
         expect(theme).toBeNull();
         expect(mode).toBe('dark'); // Mode should still be retrieved correctly
     });
+
+
   });
 });

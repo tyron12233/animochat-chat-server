@@ -290,7 +290,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
       type: "change_theme",
       content: {
         mode: themeInfo.mode,
-        theme: themeInfo.theme
+        theme: themeInfo.theme ?? null
       },
       sender: "system"
     };

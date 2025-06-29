@@ -199,9 +199,10 @@ export class ChatRoomRepository {
       }
     }
 
+    const validMode = mode === "light" || mode === "dark" ? mode : "light";
     return {
       theme: theme,
-      mode: (mode as "light" | "dark") || "light", // Default to 'light' if mode is not set
+      mode: validMode
     };
   }
 
