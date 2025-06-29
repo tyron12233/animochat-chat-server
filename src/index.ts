@@ -176,7 +176,13 @@ app.get("/sync/:chatId", async (req, res) => {
     content: messages,
   };
 
-  res.json(messagesSyncPacket);
+  const themeInfo = await roomRepo.getTheme(chatId);
+
+  res.json({
+    theme: themeInfo.theme || null,
+    mode: themeInfo.mode || "light",
+    messages: messagesSyncPacket,  
+  })
 });
 
 // --- WebSocket Upgrade Handling (No changes needed) ---
@@ -261,19 +267,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   }
 
   console.log(`[${chatId}] User '${userId}' connected.`);
-
-  const themeInfo = await roomRepo.getTheme(chatId);
-  if (themeInfo && themeInfo.theme && themeInfo.theme.name) {
-    const themePacket: ChangeThemePacket = {
-      type: "change_theme",
-      content: {
-        mode: themeInfo.mode,
-        theme: themeInfo.theme!,
-      },
-      sender: "system",
-    };
-    ws.send(JSON.stringify(themePacket));
-  }
 
   // Sync participants to the newly connected client
   const nicknamesMap = (await roomRepo.getNicknames(chatId)) as Map<
