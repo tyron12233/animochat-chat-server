@@ -195,7 +195,9 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     room.removeUser(chatWs);
 
-    if (room.isEmpty()) {
+    const isOneToOneChat = room.maxParticipants === 2;
+    // we only delete the room if it's a 1-on-1 chat and it becomes empty
+    if (room.isEmpty() && isOneToOneChat) {
       console.log(
         `[${chatId}] Room '${room.name}' is now empty and has been closed.`
       );
