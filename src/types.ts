@@ -24,6 +24,8 @@ export type Packet<T, K extends string> = {
   sender: string;
 };
 
+
+export type BanPacket = Packet<string, "ban">;
 // This packet is used when the user is offline or not connected.
 // the content is a string (the user id of the user who when offline).
 export type OfflinePacket = Packet<string, "offline">;

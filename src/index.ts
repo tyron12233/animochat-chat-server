@@ -63,6 +63,63 @@ app.post("/create-room", (req, res) => {
   res.status(201).json(roomInfo);
 });
 
+// endpoint to ban a user from a chat room
+app.post("/ban/:chatRoom/:userId", (req, res) => {
+  // TODO ADD JWT AUTHENTICATION
+  const chatId = req.params.chatRoom;
+  const userId = req.params.userId;
+  const ipBan = req.query.ipBan === "true";
+  const room = chatRooms.get(chatId);
+  if (!room) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  if (room.bannedUsers.has(userId)) {
+    res.status(400).json({ error: "User is already banned" });
+    return;
+  }
+
+  room.bannedUsers.add(userId);
+
+  const nickname = room.nicknames.get(userId);
+  if (!nickname) {
+    return;
+  }
+
+  const notification = JSON.stringify({
+    type: "STATUS",
+    message: `${nickname} has been banned from the chat room.`,
+  });
+  room.broadcastToAll(notification);
+
+  res.status(200).json({
+    message: `User ${nickname} has been banned from the chat room.`,
+  });
+
+  room.participants.forEach((participant) => {
+    if (participant.userId === userId) {
+      participant.connections.forEach((conn) => {
+        conn.close(1008, "You have been banned from this room.");
+      });
+    }
+  });
+
+  if (ipBan) {
+    // get the ip address of the user
+    const websockets = room.participants.get(userId)?.connections;
+    if (websockets) {
+      websockets.forEach((ws) => {
+        const ip = (ws as any)?._socket?.remoteAddress;
+        if (ip) {
+          room.bannedIps.add(ip);
+        }
+      });
+    }
+  }
+  return;
+});
+
 // message sync endpoint
 app.get("/sync/:chatId", (req, res) => {
   const chatId = req.params.chatId;
@@ -151,6 +208,18 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       sender: "system",
     };
     ws.send(JSON.stringify(packet));
+  }
+
+  if (room.bannedUsers.has(userId)) {
+    ws.close(1008, "You are banned from this room.");
+    return;
+  }
+
+  // is ip banned?
+  const ip = req.socket.remoteAddress;
+  if (ip && room.bannedIps.has(ip)) {
+    ws.close(1008, "Your IP is banned from this room.");
+    return;
   }
 
   const participants: Set<Omit<Participant, "connections">> = new Set();

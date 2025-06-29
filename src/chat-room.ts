@@ -58,6 +58,8 @@ export class ChatRoom {
   public theme?: ChatThemeV2;
   public mode: "light" | "dark" = "light";
   public messages: Message[] = [];
+  public bannedUsers: Set<string> = new Set<string>();
+  public bannedIps: Set<string> = new Set<string>();
   
   // user id to nickanme mapping
   public nicknames: Map<string, string> = new Map<string, string>();
