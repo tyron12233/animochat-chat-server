@@ -58,7 +58,7 @@ function broadcast(chatId: string, message: string, excludeUserId?: string) {
 
 // --- Express Endpoints (Refactored) ---
 
-addStatusEndPoint(app, activeConnections); // Pass connections map for status
+addStatusEndPoint(app, roomRepo, activeConnections);
 
 app.get("/rooms", async (req, res) => {
   // Logic to get public rooms needs to be implemented in the repository
