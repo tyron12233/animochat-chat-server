@@ -203,7 +203,7 @@ export class ChatRoomRepository {
     }
 
     return {
-      theme: null,
+      theme: theme,
       mode: (mode as "light" | "dark") || "light", // Default to 'light' if mode is not set
     };
   }
