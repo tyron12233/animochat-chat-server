@@ -184,6 +184,11 @@ export class ChatRoomRepository {
     if (themeString) {
       try {
         theme = JSON.parse(themeString);
+
+        // if json is an empty object, return null
+        if (theme && Object.keys(theme).length === 0) {
+          theme = null;
+        }
       } catch (error) {
         console.error(`[${chatId}] Corrupted theme JSON in Redis:`, error);
         // Return null for theme if parsing fails, but still return the mode
