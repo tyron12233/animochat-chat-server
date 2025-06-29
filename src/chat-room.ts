@@ -268,8 +268,14 @@ export class ChatRoom {
       sender: "system",
       session_id: this.chatId,
     }
+    const notification = JSON.stringify({
+        type: "STATUS",
+        message: message,
+      });
     this.messages.push(systemMessage);
-    this.broadcastToAll(JSON.stringify(systemMessage));
+    this.broadcastToAll(JSON.stringify(
+      notification
+    ));
 
     
     const packet: ChangeNicknamePacket = {
