@@ -273,9 +273,7 @@ export class ChatRoom {
         message: message,
       });
     this.messages.push(systemMessage);
-    this.broadcastToAll(JSON.stringify(
-      notification
-    ));
+    this.broadcastToAll(notification);
 
     
     const packet: ChangeNicknamePacket = {
