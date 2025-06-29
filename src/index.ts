@@ -281,8 +281,18 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
       content: { userId, nickname: await roomRepo.getNickname(chatId, userId) },
       sender: "system"
   };
-  broadcast(chatId, JSON.stringify(joinedPacket), userId);
+  broadcast(chatId, JSON.stringify(joinedPacket));
 
+  // sync theme
+  const themeInfo = await roomRepo.getTheme(chatId);
+  if (themeInfo) {
+    const themePacket: ChangeThemePacket = {
+      type: "change_theme",
+      content: themeInfo,
+      sender: "system"
+    };
+    ws.send(JSON.stringify(themePacket));
+  }
 
   ws.on("message", async (message: Buffer) => {
     const parsedMessage = message.toString();

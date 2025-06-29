@@ -170,6 +170,24 @@ export class ChatRoomRepository {
     await this.redis.hset(key, "mode", mode);
   }
 
+
+  async getTheme(chatId: string): Promise<{
+    mode: "light" | "dark";
+    theme: ChatThemeV2;
+  } | null> {
+    const key = roomKey(chatId, "info");
+    const themeStr = await this.redis.hget(key, "theme");
+    if (!themeStr) return null; // No theme set
+    try {
+      const theme: ChatThemeV2 = JSON.parse(themeStr);
+      const mode = (await this.redis.hget(key, "mode")) as "light" | "dark";
+      return { mode: mode || "light", theme };
+    } catch (error) {
+      console.error(`Error parsing theme for chat ${chatId}:`, error);
+      return null; // Return null if parsing fails
+    }
+  }
+
   async getAllRoomIds(): Promise<string[]> {
     const roomIds: string[] = [];
     let cursor = "0";
