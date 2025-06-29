@@ -20,7 +20,7 @@ export class ChatRoomRepository {
     return this.redis.hset(key, {
       name,
       maxParticipants,
-      theme: JSON.stringify({}), // Default empty theme
+      theme: null, // Default empty theme
       mode: "light",
     });
   }
@@ -184,6 +184,10 @@ export class ChatRoomRepository {
     
     // Safely parse the theme string if it exists
     if (themeString) {
+      if (themeString === "null" || themeString === "{}") {
+        // If the theme is explicitly set to null or an empty object, return null
+        return { theme: null, mode: (mode as "light" | "dark") || "light" };
+      }
       try {
         theme = JSON.parse(themeString);
 

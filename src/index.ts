@@ -312,6 +312,10 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         await roomRepo.setNickname(chatId, userId, newNickname);
         // Broadcast the change
         broadcast(chatId, parsedMessage);
+      } else if (packet.type === "change_theme") {
+        const { mode, theme } = packet.content;
+        await roomRepo.setTheme(chatId, mode, theme);
+        broadcast(chatId, parsedMessage);
       } else {
         // Broadcast other ephemeral packets like typing, theme changes etc.
         broadcast(chatId, parsedMessage, userId);
