@@ -285,13 +285,16 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
   // sync theme
   const themeInfo = await roomRepo.getTheme(chatId);
-  if (themeInfo) {
-    // const themePacket: ChangeThemePacket = {
-    //   type: "change_theme",
-    //   content: themeInfo,
-    //   sender: "system"
-    // };
-    // ws.send(JSON.stringify(themePacket));
+  if (themeInfo && themeInfo.theme) {
+    const themePacket: ChangeThemePacket = {
+      type: "change_theme",
+      content: {
+        mode: themeInfo.mode,
+        theme: themeInfo.theme
+      },
+      sender: "system"
+    };
+    ws.send(JSON.stringify(themePacket));
   }
 
   ws.on("message", async (message: Buffer) => {

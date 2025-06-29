@@ -173,7 +173,7 @@ export class ChatRoomRepository {
 
   async getTheme(chatId: string): Promise<{
     mode: "light" | "dark";
-    theme: ChatThemeV2;
+    theme: ChatThemeV2 | null;
   } | null> {
     const key = roomKey(chatId, "info");
     const themeStr = await this.redis.hget(key, "theme");
