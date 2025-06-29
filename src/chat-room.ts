@@ -1,135 +1,174 @@
 import WebSocket from "ws";
-import type { ChatThemeV2, Message, OfflinePacket } from "./types";
+import type {
+    ChatRoomInfo,
+  ChatThemeV2,
+  Message,
+  OfflinePacket,
+  UserJoinedPacket,
+} from "./types";
 
 export interface ChatWebSocket extends WebSocket {
-    userId: string;
+  userId: string;
 }
 
 export class ChatRoom {
+  public chatId: string;
+  public name: string;
+  public maxParticipants: number;
+  public theme?: ChatThemeV2;
+  public mode: "light" | "dark" = "light";
+  public messages: Message[] = [];
 
-    public chatId: string;
-    public theme?: ChatThemeV2;
-    public mode: 'light' | 'dark' = 'light';
-    // Map<userId, Set<WebSocketConnections>>
-    private participants: Map<string, Set<WebSocket>>;
+  // Map<userId, Set<WebSocketConnections>>
+  private participants: Map<string, Set<WebSocket>>;
 
-    public messages: Message[] = [];
+  constructor(chatId: string, name: string, maxParticipants: number = 2) {
+    this.chatId = chatId;
+    this.name = name;
+    this.maxParticipants = maxParticipants;
+    this.participants = new Map<string, Set<WebSocket>>();
+  }
 
-     constructor(chatId: string) {
-        this.chatId = chatId;
-        this.participants = new Map<string, Set<WebSocket>>();
-        console.log(`[${chatId}] ChatRoom created.`);
+  /**
+   * Adds a new WebSocket connection to the room for a specific user.
+   * @param ws The ChatWebSocket instance to add.
+   * @returns A status object indicating if a new user joined and the total user count.
+   * @throws An error if a new user tries to join a full room.
+   */
+  addUser(ws: ChatWebSocket): { isNewUser: boolean; userCount: number } {
+    const isExistingUser = this.participants.has(ws.userId);
+
+    if (!isExistingUser && this.isFull()) {
+      throw new Error(`Chat room '${this.name}' is already full.`);
     }
 
+    if (!this.participants.has(ws.userId)) {
+      this.participants.set(ws.userId, new Set<ChatWebSocket>());
+    }
+    this.participants.get(ws.userId)!.add(ws);
 
-     /**
-     * Adds a new WebSocket connection to the room for a specific user.
-     * @param ws The ChatWebSocket instance to add.
-     * @returns A status object indicating if a new user joined and the total user count.
-     * @throws An error if a new user tries to join a full room.
-     */
-    addUser(ws: ChatWebSocket): { isNewUser: boolean; userCount: number } {
-        const isExistingUser = this.participants.has(ws.userId);
+    // Notify other participants that a new user has joined.
+    if (!isExistingUser) {
+      const packet: UserJoinedPacket = {
+        type: "user_joined",
+        content: ws.userId,
+        sender: "system",
+      };
+      this.broadcast(ws, JSON.stringify(packet));
+    }
 
-        if (!isExistingUser && this.isFull()) {
-            throw new Error('Chat room is already full with 2 users.');
+    return {
+      isNewUser: !isExistingUser,
+      userCount: this.getParticipantCount(),
+    };
+  }
+
+  /**
+   * Removes a WebSocket connection from the room. If the user has no more
+   * connections, they are removed from the participants list, and an
+   * 'offline' packet is broadcast to the remaining user.
+   * @param ws The ChatWebSocket instance to remove.
+   */
+  removeUser(ws: ChatWebSocket): void {
+    const userConnections = this.participants.get(ws.userId);
+    if (!userConnections) return;
+
+    userConnections.delete(ws);
+
+    if (userConnections.size === 0) {
+      console.log(
+        `[${this.chatId}] User '${ws.userId}' has no more connections and is removed from the room.`
+      );
+      this.participants.delete(ws.userId);
+
+      // Notify remaining participants that a user has gone offline.
+      const packet: OfflinePacket = {
+        type: "offline",
+        content: ws.userId,
+        sender: ws.userId,
+      };
+      this.broadcastToAll(JSON.stringify(packet));
+    }
+  }
+
+  /**
+   * Broadcasts a message to all participants in the room except the sender.
+   * @param senderWs The WebSocket of the message sender.
+   * @param message The message to broadcast.
+   */
+  broadcast(senderWs: ChatWebSocket, message: string): void {
+    this.participants.forEach((connectionSet, userId) => {
+      // We don't broadcast to the sender's own connections
+      if (userId === senderWs.userId) {
+        return;
+      }
+      connectionSet.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
         }
+      });
+    });
+  }
 
-        if (!this.participants.has(ws.userId)) {
-            this.participants.set(ws.userId, new Set<ChatWebSocket>());
+  /**
+   * Broadcasts a message to every single client in the room, including the sender.
+   * @param message The message to broadcast.
+   */
+  broadcastToAll(message: string): void {
+    this.participants.forEach((connectionSet) => {
+      connectionSet.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
         }
-        this.participants.get(ws.userId)!.add(ws);
+      });
+    });
+  }
 
-        return { isNewUser: !isExistingUser, userCount: this.getParticipantCount() };
-    }
+  /** Sets the shared theme for the chat room. */
+  setTheme(theme: ChatThemeV2) {
+    this.theme = theme;
+  }
 
-     /**
-     * Removes a WebSocket connection from the room. If the user has no more
-     * connections, they are removed from the participants list, and an
-     * 'offline' packet is broadcast to the remaining user.
-     * @param ws The ChatWebSocket instance to remove.
-     */
-    removeUser(ws: ChatWebSocket): void {
-        const userConnections = this.participants.get(ws.userId);
-        if (!userConnections) return;
+  /** Sets the shared mode for the chat room. */
+  setMode(mode: "light" | "dark") {
+    this.mode = mode;
+  }
 
-        userConnections.delete(ws);
+  /** Checks if the room has reached its maximum capacity of unique users. */
+  isFull(): boolean {
+    return this.participants.size >= this.maxParticipants;
+  }
 
-        if (userConnections.size === 0) {
-            console.log(`[${this.chatId}] User '${ws.userId}' has no more connections and is removed from the room.`);
-            this.participants.delete(ws.userId);
+  /** Checks if the room has any participants left. */
+  isEmpty(): boolean {
+    return this.participants.size === 0;
+  }
 
-            // Notify remaining participants that a user has gone offline.
-            const packet: OfflinePacket = {
-                type: 'offline',
-                content: ws.userId,
-                sender: ws.userId,
-            };
-            this.broadcastToAll(JSON.stringify(packet));
-        }
-    }
+  /** Returns the number of unique users in the room. */
+  getParticipantCount(): number {
+    return this.participants.size;
+  }
 
+  /** Returns an array of the user IDs of all participants. */
+  getParticipantIds(): string[] {
+    return Array.from(this.participants.keys());
+  }
 
-    /**
-     * Broadcasts a message to all participants in the room except the sender.
-     * @param senderWs The WebSocket of the message sender.
-     * @param message The message to broadcast.
-     */
-    broadcast(senderWs: ChatWebSocket, message: string): void {
-        this.participants.forEach((connectionSet) => {
-            connectionSet.forEach(client => {
-                // Check if it's not the sender and the connection is open
-                if (client !== senderWs && client.readyState === WebSocket.OPEN) {
-                    client.send(message);
-                }
-            });
-        });
-    }
+  /** Returns the total number of active WebSocket connections in the room. */
+  getTotalConnectionCount(): number {
+    return Array.from(this.participants.values()).reduce(
+      (acc, connectionsSet) => acc + connectionsSet.size,
+      0
+    );
+  }
 
-    /**
-     * Broadcasts a message to every single client in the room.
-     * @param message The message to broadcast.
-     */
-    broadcastToAll(message: string): void {
-        this.participants.forEach(connectionSet => {
-            connectionSet.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(message);
-                }
-            });
-        });
-    }
-
-      /**
-     * Sets the shared theme for the chat room.
-     * @param theme The theme object.
-     */
-    setTheme(theme: ChatThemeV2) {
-        this.theme = theme;
-    }
-
-    setMode(mode: 'light' | 'dark') {
-        this.mode = mode;
-    }
-
-    /** Checks if the room has reached its maximum capacity of unique users. */
-    isFull(): boolean {
-        return this.participants.size >= 2;
-    }
-
-    /** Checks if the room has any participants left. */
-    isEmpty(): boolean {
-        return this.participants.size === 0;
-    }
-
-    /** Returns the number of unique users in the room. */
-    getParticipantCount(): number {
-        return this.participants.size;
-    }
-
-    /** Returns the total number of active WebSocket connections in the room. */
-    getTotalConnectionCount(): number {
-        return Array.from(this.participants.values())
-            .reduce((acc, connectionsSet) => acc + connectionsSet.size, 0);
-    }
+  /** Returns the public-facing information for the chat room. */
+  getInfo(): ChatRoomInfo {
+    return {
+      id: this.chatId,
+      name: this.name,
+      participants: this.getParticipantIds(),
+      max_participants: this.maxParticipants,
+    };
+  }
 }

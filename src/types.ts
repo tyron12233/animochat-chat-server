@@ -1,5 +1,14 @@
 // CLIENT TYPES TINATAMAD ISHARE WITH THE CLIENT COPY PASTE MUNA
 
+export interface ChatRoomInfo {
+  id: string;
+  name: string;
+  participants: string[];
+  max_participants: number;
+}
+
+export type UserJoinedPacket = Packet<string, "user_joined">;
+
 export type Packet<T, K extends string> = {
   type: K;
   content: T;

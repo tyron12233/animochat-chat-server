@@ -4,68 +4,18 @@ import http from "http";
 import express from "express";
 import { IncomingMessage } from "http";
 import cors from "cors";
-import type { ChangeThemePacket, ChatThemeV2, MessagesSyncPacket, OfflinePacket } from "./types";
+import type {
+  ChangeThemePacket,
+  ChatRoomInfo,
+  ChatThemeV2,
+  MessagesSyncPacket,
+  OfflinePacket,
+} from "./types";
 import { ChatRoom, type ChatWebSocket } from "./chat-room";
-import os from "os";
-
-const CHAT_SERVER_PORT = process.env.PORT
-  ? parseInt(process.env.PORT, 10)
-  : 8080;
-
-const DISCOVERY_SERVER_URL =
-  process.env.DISCOVERY_SERVER_URL ||
-  "https://animochat-service-discovery.onrender.com";
-const SERVICE_NAME = "chat-service";
-const SERVICE_VERSION = "1.0.0";
-const SERVICE_URL =
-  process.env.SERVICE_URL || `http://localhost:${CHAT_SERVER_PORT}`;
-
-const registerService = async () => {
-  try {
-    const response = await fetch(`${DISCOVERY_SERVER_URL}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        serviceName: SERVICE_NAME,
-        version: SERVICE_VERSION,
-        url: SERVICE_URL,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Failed to register service. Status: ${
-          response.status
-        } ${await response.text()}`
-      );
-    }
-    console.log(
-      "Service registered/heartbeat sent successfully to discovery server."
-    );
-  } catch (error) {
-    console.error("Failed to register service:", (error as Error).message);
-  }
-};
-
-const unregisterService = async () => {
-  try {
-    const response = await fetch(`${DISCOVERY_SERVER_URL}/unregister`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        serviceName: SERVICE_NAME,
-        version: SERVICE_VERSION,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Failed to unregister service. Status: ${response.status}`
-      );
-    }
-    console.log("Service unregistered successfully from discovery server.");
-  } catch (error) {
-    console.error("Failed to unregister service:", (error as Error).message);
-  }
-};
+import addStatusEndPoint, {
+  CHAT_SERVER_PORT,
+  startServiceRegistration,
+} from "./service";
 
 /**
  * This Map stores the active chat rooms.
@@ -80,55 +30,33 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 // --- Express Status Endpoint ---
-app.get("/status", (req, res) => {
-  // --- Helper Functions for Metrics ---
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
+addStatusEndPoint(app, chatRooms);
 
-  const formatUptime = (seconds: number): string => {
-    const d = Math.floor(seconds / (3600 * 24));
-    const h = Math.floor((seconds % (3600 * 24)) / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return `${d}d ${h}h ${m}m ${s}s`;
-  };
+app.get("/rooms", (req, res) => {
+  // return all group chats (those who have greater than 2 max participants)
+  const rooms: ChatRoomInfo[] = [];
+  chatRooms.forEach((room) => {
+    if (room.maxParticipants > 2) {
+      rooms.push(room.getInfo());
+    }
+  });
+  res.json(rooms);
+});
 
-  const memoryUsage = process.memoryUsage();
+// post endpoint to create a new chat room
+app.post("/create-room", (req, res) => {
+  const { name, maxParticipants } = req.body;
+  if (!name || !maxParticipants) {
+    res.status(400).json({ error: "Name and maxParticipants are required" });
+    return;
+  }
 
-  const roomsStatus = {
-    totalRooms: chatRooms.size,
-    rooms: Array.from(chatRooms.values()).map((room) => ({
-      chatId: room.chatId,
-      participants: room.getParticipantCount(),
-      totalConnections: room.getTotalConnectionCount(),
-      theme: room.theme,
-    })),
-    serviceName: SERVICE_NAME,
-        version: SERVICE_VERSION,
-        timestamp: new Date().toISOString(),
-        uptime: formatUptime(process.uptime()),
-        processMemory: {
-            rss: `${formatBytes(memoryUsage.rss)} (Resident Set Size)`,
-            heapTotal: `${formatBytes(memoryUsage.heapTotal)} (Total V8 Heap)`,
-            heapUsed: `${formatBytes(memoryUsage.heapUsed)} (Used V8 Heap)`,
-            external: `${formatBytes(memoryUsage.external)} (C++ Objects)`,
-        },
-        os: {
-            hostname: os.hostname(),
-            platform: os.platform(),
-            totalMemory: formatBytes(os.totalmem()),
-            freeMemory: formatBytes(os.freemem()),
-            cpuCount: os.cpus().length,
-            loadAverage: os.loadavg(),
-        },
-        cpuUsage: process.cpuUsage(),
-  };
-  res.json(roomsStatus);
+  const chatId = `room-${Date.now()}`;
+  const newRoom = new ChatRoom(chatId, name, maxParticipants);
+  chatRooms.set(chatId, newRoom);
+
+  const roomInfo: ChatRoomInfo = newRoom.getInfo();
+  res.status(201).json(roomInfo);
 });
 
 // message sync endpoint
@@ -172,77 +100,91 @@ server.on("upgrade", (request, socket, head) => {
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   const chatWs = ws as ChatWebSocket;
   const url = new URL(req.url!, `http://${req.headers.host}`);
+
+  // Extract all necessary parameters from the URL
   const chatId = url.searchParams.get("chatId")!;
   const userId = url.searchParams.get("userId")!;
+  const roomName = url.searchParams.get("name") || `Chat with ${userId}`; // Default name
+  const maxParticipants = parseInt(
+    url.searchParams.get("maxParticipants") || "2",
+    10
+  ); // Default to 2 for 1-on-1 chat
 
-  let isExistingRoom = false;
   chatWs.userId = userId;
-
-  console.log(`[${chatId}] User '${userId}' attempting to connect...`);
+  console.log(
+    `[${chatId}] User '${userId}' attempting to connect to room '${roomName}'...`
+  );
 
   // --- Room and User Management ---
-  // Get or create the ChatRoom instance for the given chatId.
+  // Get or create the ChatRoom instance. The first user to connect defines the room's properties.
   if (!chatRooms.has(chatId)) {
-    chatRooms.set(chatId, new ChatRoom(chatId));
-  } else {
-    isExistingRoom = true;
+    // For backward compatibility, old clients will default to maxParticipants=2
+    chatRooms.set(chatId, new ChatRoom(chatId, roomName, maxParticipants));
   }
+
   const room = chatRooms.get(chatId)!;
 
-  if (isExistingRoom && room.theme) {
+  if (room.theme) {
     const packet: ChangeThemePacket = {
       type: "change_theme",
-      content: {
-        theme: room.theme,
-        mode: room.mode,
-      },
+      content: { theme: room.theme, mode: room.mode },
       sender: "system",
     };
     ws.send(JSON.stringify(packet));
   }
 
   try {
-    // Add the user to the room. The ChatRoom class handles the logic.
+    // Add the user to the room. The ChatRoom class now handles capacity checks.
     const { isNewUser, userCount } = room.addUser(chatWs);
     console.log(
-      `[${chatId}] User '${userId}' connected successfully. Room has ${userCount} user(s) and ${room.getTotalConnectionCount()} total connection(s).`
+      `[${chatId}] User '${userId}' connected successfully. Room '${
+        room.name
+      }' has ${userCount} user(s) and ${room.getTotalConnectionCount()} total connection(s).`
     );
 
-    // Notify when the second user joins.
-    if (isNewUser && userCount === 2) {
+    // **BACKWARD COMPATIBILITY**: Only send the specific "partner has connected" message
+    // for legacy 1-on-1 chats. Group chats get a generic "user_joined" packet from the ChatRoom class.
+    if (room.maxParticipants === 2 && isNewUser && userCount === 2) {
       console.log(
-        `[${chatId}] Room now has 2 users. Notifying all participants.`
+        `[${chatId}] 1-on-1 room now has 2 users. Notifying partner.`
       );
       const notification = JSON.stringify({
         type: "STATUS",
         message: "Your partner has connected. You can now chat!",
       });
-      room.broadcastToAll(notification);
+      // This broadcast goes to the other user.
+      room.broadcast(chatWs, notification);
     }
   } catch (error) {
     // This catch block handles the case where the room is full.
+    const errorMessage = (error as Error).message;
     console.error(
-      `[${chatId}] Connection rejected for new user '${userId}': ${
-        (error as Error).message
-      }`
+      `[${chatId}] Connection rejected for user '${userId}': ${errorMessage}`
     );
-    ws.close(1008, (error as Error).message);
+    ws.close(1008, errorMessage);
     return;
   }
 
-  // --- Message Handling ---
   ws.on("message", (message: Buffer) => {
     const parsedMessage = message.toString();
-    const packet = JSON.parse(parsedMessage);
+    try {
+      const packet = JSON.parse(parsedMessage);
 
-    if (packet.type === "change_theme") {
-      room.setTheme(packet.content.theme);
-      room.setMode(packet.content.mode);
-    } else if (packet.type === "message") {
-      room.messages.push(packet.content); 
+      if (packet.type === "change_theme") {
+        room.setTheme(packet.content.theme);
+        room.setMode(packet.content.mode);
+      } else if (packet.type === "message") {
+        room.messages.push(packet.content);
+      }
+
+      // Broadcast all other packets to other users in the room
+      room.broadcast(chatWs, parsedMessage);
+    } catch (e) {
+      console.error(
+        `[${chatId}] Failed to parse message from '${chatWs.userId}':`,
+        e
+      );
     }
-
-    room.broadcast(chatWs, parsedMessage);
   });
 
   // --- Disconnection Handling ---
@@ -250,12 +192,12 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const room = chatRooms.get(chatId);
     if (!room) return;
 
-    // The ChatRoom instance handles removing the user and notifying others.
     room.removeUser(chatWs);
 
-    // If the room becomes empty, we clean it up.
     if (room.isEmpty()) {
-      console.log(`[${chatId}] Room is now empty and has been closed.`);
+      console.log(
+        `[${chatId}] Room '${room.name}' is now empty and has been closed.`
+      );
       chatRooms.delete(chatId);
     }
   });
@@ -269,13 +211,6 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   });
 });
 
-setInterval(registerService, 10000);
-
-process.on("SIGINT", async () => {
-  await unregisterService();
-  process.exit();
-});
-
 server.listen(CHAT_SERVER_PORT, () => {
   console.log(
     `Express and WebSocket Server is running on port ${CHAT_SERVER_PORT}`
@@ -285,5 +220,5 @@ server.listen(CHAT_SERVER_PORT, () => {
   );
   console.log(`Check status at http://localhost:${CHAT_SERVER_PORT}/status`);
 
-  registerService();
+  startServiceRegistration();
 });
