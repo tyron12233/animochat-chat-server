@@ -1,11 +1,18 @@
 import { Redis } from 'ioredis';
 import { ChatRoomRepository } from '../src/chat-room-repository'; // Adjust path if needed
-import { type Message } from '../src/types'; 
+import { type ChatThemeV2, type Message } from '../src/types'; 
 
 describe('ChatRoomRepository', () => {
   let repo: ChatRoomRepository;
   let redisClient: Redis;
   const testChatId = 'test-room-123';
+  const sampleTheme: ChatThemeV2 = {
+    name: 'Test Theme',
+    typography: { fontFamily: 'Arial', baseFontSize: '16px' },
+    general: { background: { light: '#fff', dark: '#000' }, backdropBlur: '5px', shadow: 'none', borderRadius: '10px' },
+    header: { background: { light: '#eee', dark: '#333' }, border: { light: '#ddd', dark: '#444' }, statusLabel: { light: '#666', dark: '#aaa' }, statusValue: { light: '#000', dark: '#fff' } },
+    // Abridged theme for testing purposes
+  } as ChatThemeV2; 
 
   // Before all tests, connect to a separate test database
   beforeAll(() => {
@@ -158,6 +165,62 @@ describe('ChatRoomRepository', () => {
         expect(isBanned).toBe(true);
 
         expect(isOtherUserBanned).toBe(false);
+    });
+  });
+
+   // ====================================================================
+  // NEW TEST SUITE: Theme Management
+  // ====================================================================
+  describe('Theme Management', () => {
+    it('should set and get a theme correctly', async () => {
+        // Act
+        await repo.setTheme(testChatId, sampleTheme, 'dark');
+        const { theme, mode } = await repo.getTheme(testChatId);
+
+        // Assert
+        expect(mode).toBe('dark');
+        expect(theme).toEqual(sampleTheme);
+    });
+
+    it('should return null theme when none is set', async () => {
+        // Act
+        const { theme, mode } = await repo.getTheme(testChatId);
+
+        // Assert
+        expect(theme).toBeNull();
+        expect(mode).toBe('light'); // Should return default mode
+    });
+
+    it('should return null for an empty object theme', async () => {
+        // Arrange
+        // Manually set an empty object as the theme
+        await redisClient.hset(`chat:${testChatId}:info`, 'theme', JSON.stringify({}));
+
+        // Act
+        const { theme } = await repo.getTheme(testChatId);
+        
+        // Assert
+        expect(theme).toBeNull();
+    });
+
+    // Use test.each to run the same test for different corrupted data inputs
+    test.each([
+        ['[object Object]'],
+        ['null'],
+        ['{}'],
+        ['invalid-json'],
+        ['{"key": "value",'] // Incomplete JSON
+    ])('should return null theme for corrupted data: "%s"', async (corruptedData) => {
+        // Arrange: Manually set a corrupted string as the theme value in Redis
+        await redisClient.hset(`chat:${testChatId}:info`, 'theme', corruptedData);
+        await redisClient.hset(`chat:${testChatId}:info`, 'mode', 'dark');
+
+        // Act
+        const { theme, mode } = await repo.getTheme(testChatId);
+
+        // Assert
+        expect(theme).toBeNull();
+        expect(mode).toBe('dark'); // Mode should still be retrieved correctly
     });
   });
 });
