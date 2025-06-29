@@ -152,7 +152,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     );
 
     // **BACKWARD COMPATIBILITY**: Only send the specific "partner has connected" message
-    // for legacy 1-on-1 chats. Group chats get a generic "user_joined" packet from the ChatRoom class.
+    // for legacy 1-on-1 chats. 
     if (room.maxParticipants === 2 && isNewUser && userCount === 2) {
       console.log(
         `[${chatId}] 1-on-1 room now has 2 users. Notifying partner.`
@@ -167,8 +167,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     // Send the participant joined packet to all users in the room
     const participantNickname = room
-      .getParticipantNicknames()
-      .get(chatWs.userId);
+      .nicknames.get(chatWs.userId)
     if (participantNickname) {
       const participantJoinedPacket = {
         type: "participant_joined",

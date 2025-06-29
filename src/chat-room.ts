@@ -5,6 +5,7 @@ import type {
   Message,
   OfflinePacket,
   Participant,
+  ParticipantJoinedPacket,
   UserJoinedPacket,
 } from "./types";
 
@@ -55,6 +56,9 @@ export class ChatRoom {
   public theme?: ChatThemeV2;
   public mode: "light" | "dark" = "light";
   public messages: Message[] = [];
+  
+  // user id to nickanme mapping
+  public nicknames: Map<string, string> = new Map<string, string>();
 
   // Map<userId, Participant>
   private participants: Map<string, Participant>;
@@ -80,7 +84,18 @@ export class ChatRoom {
     }
 
     if (!isExistingUser) {
-      const name = generateUserFriendlyName();
+      
+      // Generate a user-friendly name if the user doesn't have one
+      let name = this.nicknames.get(ws.userId);
+      if (!name) {
+        name = generateUserFriendlyName();
+        // Ensure the name is unique by checking against existing nicknames
+        while (this.nicknames.has(name)) {
+          name = generateUserFriendlyName();
+        }
+        this.nicknames.set(ws.userId, name);
+      }
+
       this.participants.set(ws.userId, {
         userId: ws.userId,
         connections: new Set<ChatWebSocket>(),
@@ -90,17 +105,6 @@ export class ChatRoom {
 
     const participant = this.participants.get(ws.userId)!;
     participant.connections.add(ws);
-
-
-    // Notify other participants that a new user has joined.
-    if (!isExistingUser) {
-      const packet: UserJoinedPacket = {
-        type: "user_joined",
-        content: ws.userId,
-        sender: "system",
-      };
-      this.broadcast(ws, JSON.stringify(packet));
-    }
 
     return {
       isNewUser: !isExistingUser,
