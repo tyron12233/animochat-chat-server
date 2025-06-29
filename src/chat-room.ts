@@ -4,12 +4,16 @@ import type {
   ChatThemeV2,
   Message,
   OfflinePacket,
+  Participant,
   UserJoinedPacket,
 } from "./types";
 
 export interface ChatWebSocket extends WebSocket {
   userId: string;
+  nickname: string; // Add nickname to the WebSocket interface
 }
+
+
 
 export class ChatRoom {
   public chatId: string;
@@ -19,14 +23,14 @@ export class ChatRoom {
   public mode: "light" | "dark" = "light";
   public messages: Message[] = [];
 
-  // Map<userId, Set<WebSocketConnections>>
-  private participants: Map<string, Set<WebSocket>>;
+  // Map<userId, Participant>
+  private participants: Map<string, Participant>;
 
   constructor(chatId: string, name: string, maxParticipants: number = 2) {
     this.chatId = chatId;
     this.name = name;
     this.maxParticipants = maxParticipants;
-    this.participants = new Map<string, Set<WebSocket>>();
+    this.participants = new Map<string, Participant>();
   }
 
   /**
@@ -42,10 +46,22 @@ export class ChatRoom {
       throw new Error(`Chat room '${this.name}' is already full.`);
     }
 
-    if (!this.participants.has(ws.userId)) {
-      this.participants.set(ws.userId, new Set<ChatWebSocket>());
+    if (!isExistingUser) {
+      this.participants.set(ws.userId, {
+        userId: ws.userId,
+        connections: new Set<ChatWebSocket>(),
+        nickname: ws.nickname,
+      });
     }
-    this.participants.get(ws.userId)!.add(ws);
+
+    const participant = this.participants.get(ws.userId)!;
+    participant.connections.add(ws);
+
+    // If the nickname has changed, update it
+    if (participant.nickname !== ws.nickname) {
+        participant.nickname = ws.nickname;
+    }
+
 
     // Notify other participants that a new user has joined.
     if (!isExistingUser) {
@@ -70,14 +86,14 @@ export class ChatRoom {
    * @param ws The ChatWebSocket instance to remove.
    */
   removeUser(ws: ChatWebSocket): void {
-    const userConnections = this.participants.get(ws.userId);
-    if (!userConnections) return;
+    const participant = this.participants.get(ws.userId);
+    if (!participant) return;
 
-    userConnections.delete(ws);
+    participant.connections.delete(ws);
 
-    if (userConnections.size === 0) {
+    if (participant.connections.size === 0) {
       console.log(
-        `[${this.chatId}] User '${ws.userId}' has no more connections and is removed from the room.`
+        `[${this.chatId}] User '${ws.userId}' (${participant.nickname}) has no more connections and is removed from the room.`
       );
       this.participants.delete(ws.userId);
 
@@ -97,12 +113,12 @@ export class ChatRoom {
    * @param message The message to broadcast.
    */
   broadcast(senderWs: ChatWebSocket, message: string): void {
-    this.participants.forEach((connectionSet, userId) => {
+    this.participants.forEach((participant, userId) => {
       // We don't broadcast to the sender's own connections
       if (userId === senderWs.userId) {
         return;
       }
-      connectionSet.forEach((client) => {
+      participant.connections.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(message);
         }
@@ -115,8 +131,8 @@ export class ChatRoom {
    * @param message The message to broadcast.
    */
   broadcastToAll(message: string): void {
-    this.participants.forEach((connectionSet) => {
-      connectionSet.forEach((client) => {
+    this.participants.forEach((participant) => {
+      participant.connections.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(message);
         }
@@ -154,20 +170,35 @@ export class ChatRoom {
     return Array.from(this.participants.keys());
   }
 
+  /** Returns a map of participant user IDs to their nicknames. */
+  getParticipantNicknames(): Map<string, string> {
+    const nicknames = new Map<string, string>();
+    this.participants.forEach((participant, userId) => {
+        nicknames.set(userId, participant.nickname);
+    });
+    return nicknames;
+  }
+
+
   /** Returns the total number of active WebSocket connections in the room. */
   getTotalConnectionCount(): number {
     return Array.from(this.participants.values()).reduce(
-      (acc, connectionsSet) => acc + connectionsSet.size,
+      (acc, participant) => acc + participant.connections.size,
       0
     );
   }
 
   /** Returns the public-facing information for the chat room. */
   getInfo(): ChatRoomInfo {
+    const participantsInfo = Array.from(this.participants.entries()).map(([userId, participant]) => ({
+        userId,
+        nickname: participant.nickname
+    }));
+
     return {
       id: this.chatId,
       name: this.name,
-      participants: this.getParticipantIds(),
+      participants: participantsInfo,
       max_participants: this.maxParticipants,
     };
   }

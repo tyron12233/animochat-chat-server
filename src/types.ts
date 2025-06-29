@@ -1,10 +1,19 @@
 // CLIENT TYPES TINATAMAD ISHARE WITH THE CLIENT COPY PASTE MUNA
 
+import type WebSocket from "ws";
+
 export interface ChatRoomInfo {
   id: string;
   name: string;
-  participants: string[];
+  // remove connections: Set<WebSocket>;
+  participants: Omit<Participant, "connections">[];
   max_participants: number;
+}
+
+export interface Participant {
+  connections: Set<WebSocket>;
+  userId: string;
+  nickname: string;
 }
 
 export type UserJoinedPacket = Packet<string, "user_joined">;
@@ -50,6 +59,10 @@ export interface UserMessage extends BaseMessage {
 export type Message = UserMessage | SystemMessage;
 
 export type MessagesSyncPacket = Packet<Message[], "messages_sync">;
+export type ParticipantsSyncPacket = Packet<Omit<Participant, "connections">[], "participants_sync">;
+export type ParticipantJoinedPacket = Packet<Participant, "participant_joined">;
+
+
 export type MessagePacket = Packet<UserMessage, "message">;
 export type ReactionPacket = Packet<Reaction, "reaction">;
 export type TypingPacket = Packet<boolean, "typing">;

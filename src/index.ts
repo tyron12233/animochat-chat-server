@@ -10,6 +10,7 @@ import type {
   ChatThemeV2,
   MessagesSyncPacket,
   OfflinePacket,
+  ParticipantsSyncPacket,
 } from "./types";
 import { ChatRoom, type ChatWebSocket } from "./chat-room";
 import addStatusEndPoint, {
@@ -134,6 +135,15 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     ws.send(JSON.stringify(packet));
   }
 
+  const participantsSync: ParticipantsSyncPacket = {
+    type: "participants_sync",
+    content: room.getInfo().participants,
+    sender: "system",
+  }
+  ws.send(JSON.stringify(participantsSync));
+
+  
+
   try {
     // Add the user to the room. The ChatRoom class now handles capacity checks.
     const { isNewUser, userCount } = room.addUser(chatWs);
@@ -142,6 +152,8 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         room.name
       }' has ${userCount} user(s) and ${room.getTotalConnectionCount()} total connection(s).`
     );
+
+
 
     // **BACKWARD COMPATIBILITY**: Only send the specific "partner has connected" message
     // for legacy 1-on-1 chats. Group chats get a generic "user_joined" packet from the ChatRoom class.
@@ -156,6 +168,17 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       // This broadcast goes to the other user.
       room.broadcast(chatWs, notification);
     }
+
+    // Send the participant joined packet to all users in the room
+    const participantJoinedPacket = {
+      type: "participant_joined",
+      content: {
+        userId: chatWs.userId,
+        nickname: chatWs.nickname,
+      },
+      sender: "system",
+    };
+    room.broadcast(chatWs, JSON.stringify(participantJoinedPacket));
   } catch (error) {
     // This catch block handles the case where the room is full.
     const errorMessage = (error as Error).message;
