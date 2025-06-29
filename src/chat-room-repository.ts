@@ -171,21 +171,30 @@ export class ChatRoomRepository {
   }
 
 
-  async getTheme(chatId: string): Promise<{
-    mode: "light" | "dark";
-    theme: ChatThemeV2 | null;
-  } | null> {
-    const key = roomKey(chatId, "info");
-    const themeStr = await this.redis.hget(key, "theme");
-    if (!themeStr) return null; // No theme set
-    try {
-      const theme: ChatThemeV2 = JSON.parse(themeStr);
-      const mode = (await this.redis.hget(key, "mode")) as "light" | "dark";
-      return { mode: mode || "light", theme };
-    } catch (error) {
-      console.error(`Error parsing theme for chat ${chatId}:`, error);
-      return null; // Return null if parsing fails
+ async getTheme(chatId: string): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }> {
+    const [themeString, mode] = await this.redis.hmget(
+      roomKey(chatId, 'info'),
+      'theme',
+      'mode'
+    );
+
+    let theme: ChatThemeV2 | null = null;
+    
+    // Safely parse the theme string if it exists
+    if (themeString) {
+      try {
+        theme = JSON.parse(themeString);
+      } catch (error) {
+        console.error(`[${chatId}] Corrupted theme JSON in Redis:`, error);
+        // Return null for theme if parsing fails, but still return the mode
+        theme = null; 
+      }
     }
+
+    return {
+      theme,
+      mode: (mode as "light" | "dark") || "light", // Default to 'light' if mode is not set
+    };
   }
 
   async getAllRoomIds(): Promise<string[]> {
