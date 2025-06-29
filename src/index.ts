@@ -4,51 +4,69 @@ import http from "http";
 import express from "express";
 import { IncomingMessage } from "http";
 import cors from "cors";
+import { Redis } from "ioredis";
+import dotenv from "dotenv";
 import type {
   ChangeThemePacket,
-  ChatRoomInfo,
-  ChatThemeV2,
   Message,
   MessagesSyncPacket,
-  OfflinePacket,
   Participant,
   ParticipantsSyncPacket,
 } from "./types";
-import { ChatRoom, type ChatWebSocket } from "./chat-room";
+import { ChatRoomRepository } from "./chat-room-repository"; // Our new repository
 import addStatusEndPoint, {
   CHAT_SERVER_PORT,
   startServiceRegistration,
 } from "./service";
+import type { ChatWebSocket } from "./chat-room"; 
 
-/**
- * This Map stores the active chat rooms.
- * The key is the 'chatId', and the value is the ChatRoom instance.
- * Structure: Map<chatId, ChatRoom>
- */
-const chatRooms = new Map<string, ChatRoom>();
+dotenv.config();
 
+// --- Initialization ---
 const app = express();
 app.use(cors());
 app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
-// --- Express Status Endpoint ---
-addStatusEndPoint(app, chatRooms);
+// 1. Initialize Redis and the Repository
+const redis = new Redis(process.env.REDIS_URL!);
+const roomRepo = new ChatRoomRepository(redis);
 
-app.get("/rooms", (req, res) => {
-  // return all group chats (those who have greater than 2 max participants)
-  const rooms: ChatRoomInfo[] = [];
-  chatRooms.forEach((room) => {
-    if (room.maxParticipants > 2) {
-      rooms.push(room.getInfo());
-    }
-  });
+/**
+ * This Map now only stores active connections for THIS server instance.
+ * It does NOT store persistent chat data like messages or room settings.
+ * Structure: Map<chatId, Map<userId, Set<ChatWebSocket>>>
+ */
+const activeConnections = new Map<string, Map<string, Set<ChatWebSocket>>>();
+
+// --- Helper function for broadcasting ---
+function broadcast(chatId: string, message: string, excludeUserId?: string) {
+    const roomConnections = activeConnections.get(chatId);
+    if (!roomConnections) return;
+
+    roomConnections.forEach((connections, userId) => {
+        if (userId === excludeUserId) return;
+        connections.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(message);
+            }
+        });
+    });
+}
+
+
+// --- Express Endpoints (Refactored) ---
+
+addStatusEndPoint(app, activeConnections); // Pass connections map for status
+
+app.get("/rooms", async (req, res) => {
+  // Logic to get public rooms needs to be implemented in the repository
+  const rooms = await roomRepo.listPublicRooms(); // Assuming this method exists
   res.json(rooms);
 });
 
-// post endpoint to create a new chat room
-app.post("/create-room", (req, res) => {
+app.post("/create-room", async (req, res) => {
   const { name, maxParticipants } = req.body;
   if (!name || !maxParticipants) {
     res.status(400).json({ error: "Name and maxParticipants are required" });
@@ -56,106 +74,96 @@ app.post("/create-room", (req, res) => {
   }
 
   const chatId = `room-${Date.now()}`;
-  const newRoom = new ChatRoom(chatId, name, maxParticipants);
-  chatRooms.set(chatId, newRoom);
-
-  const roomInfo: ChatRoomInfo = newRoom.getInfo();
-  res.status(201).json(roomInfo);
+  await roomRepo.createRoom(chatId, name, maxParticipants);
+  // If it's a public group chat, add it to the public list
+  if (maxParticipants > 2) {
+      await roomRepo.makeRoomPublic(chatId);
+  }
+  
+  res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
-// endpoint to ban a user from a chat room
-app.post("/ban/:chatRoom/:userId", (req, res) => {
-  // TODO ADD JWT AUTHENTICATION
-  const chatId = req.params.chatRoom;
-  const userId = req.params.userId;
-  const ipBan = req.query.ipBan === "true";
-  const room = chatRooms.get(chatId);
-  if (!room) {
-    res.status(404).json({ error: "Chat room not found" });
-    return;
-  }
+app.post("/ban/:chatId/:userId", async (req, res) => {
+    const { chatId, userId } = req.params;
+    
+    if (!await roomRepo.roomExists(chatId)) {
+        res.status(404).json({ error: "Chat room not found" });
+        return;
+    }
 
-  if (room.bannedUsers.has(userId)) {
-    res.status(400).json({ error: "User is already banned" });
-    return;
-  }
+    if (await roomRepo.isUserBanned(chatId, userId)) {
+        res.status(400).json({ error: "User is already banned" });
+        return;
+    }
 
-  room.bannedUsers.add(userId);
-
-  const nickname = room.nicknames.get(userId);
-  if (!nickname) {
-    return;
-  }
-
-  const notification = JSON.stringify({
-    type: "STATUS",
-    message: `${nickname} has been banned from the chat room.`,
-  });
-  room.broadcastToAll(notification);
-
-  res.status(200).json({
-    message: `User ${nickname} has been banned from the chat room.`,
-  });
-
-  room.participants.forEach((participant) => {
-    if (participant.userId === userId) {
-      participant.connections.forEach((conn) => {
+    await roomRepo.banUser(chatId, userId);
+    
+    // Disconnect the user if they are currently connected to this instance
+    const roomConnections = activeConnections.get(chatId);
+    const userConnections = roomConnections?.get(userId);
+    userConnections?.forEach(conn => {
         conn.close(1008, "You have been banned from this room.");
-      });
-    }
-  });
+    });
 
-  if (ipBan) {
-    // get the ip address of the user
-    const websockets = room.participants.get(userId)?.connections;
-    if (websockets) {
-      websockets.forEach((ws) => {
-        const ip = (ws as any)?._socket?.remoteAddress;
-        if (ip) {
-          room.bannedIps.add(ip);
-        }
-      });
-    }
-  }
-  return;
+    // Notify others
+    const nickname = await roomRepo.getNickname(chatId, userId);
+    const notification = JSON.stringify({
+        type: "STATUS",
+        message: `${nickname || 'A user'} has been banned.`,
+    });
+    broadcast(chatId, notification);
+
+    res.status(200).json({ message: `User ${nickname} has been banned.` });
 });
 
-// message sync endpoint
-app.get("/sync/:chatId", (req, res) => {
-  const chatId = req.params.chatId;
-  const room = chatRooms.get(chatId);
 
-  if (!room) {
+app.get("/sync/:chatId", async (req, res) => {
+  const { chatId } = req.params;
+
+  if (!(await roomRepo.roomExists(chatId))) {
     res.status(404).json({ error: "Chat room not found" });
-    return;
+    return
   }
 
-  // only send the last 50 messages and then add a system message (truncated)
-  let messages: Message[] = [];
-  if (room.messages.length > 50) {
-    messages = room.messages.slice(-50);
-    messages.push({
+  // Fetch the latest 50 messages to display on screen
+  const messagesToDisplay = 50;
+  let messages = await roomRepo.getMessages(chatId, 0, messagesToDisplay - 1);
+
+  // Check the total number of persisted messages
+  const totalMessageCount = await roomRepo.getMessageCount(chatId);
+
+  // If the total message count is greater than the number we are displaying,
+  // it means the history is truncated.
+  if (totalMessageCount > messagesToDisplay) {
+    // Create the system message
+    const truncationMessage: Message = {
       type: "system",
-      content: `Truncated to last 50 messages. Total messages: ${room.messages.length}`,
+      content: `Message history is limited to the last 100 messages. Total: ${totalMessageCount}`,
       sender: "system",
       created_at: new Date().toISOString(),
       session_id: chatId,
       id: `truncated-${Date.now()}`,
-    });
-  } else {
-    messages = room.messages;
+    };
+    // Replace the oldest message in the current view with our system message.
+    // Since the array is chronological, the first item is the oldest.
+    if (messages.length > 0) {
+        messages[0] = truncationMessage;
+    } else {
+        messages.push(truncationMessage);
+    }
   }
 
   const messagesSyncPacket: MessagesSyncPacket = {
     type: "messages_sync",
     sender: "system",
-    content: messages
+    content: messages,
   };
 
   res.json(messagesSyncPacket);
 });
 
-// --- WebSocket Upgrade Handling ---
+
+// --- WebSocket Upgrade Handling (No changes needed) ---
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url!, `http://${request.headers.host}`);
   const chatId = url.searchParams.get("chatId");
@@ -173,178 +181,140 @@ server.on("upgrade", (request, socket, head) => {
   });
 });
 
-// --- WebSocket Connection Logic ---
-wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+
+
+
+// --- WebSocket Connection Logic (Refactored) ---
+wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   const chatWs = ws as ChatWebSocket;
   const url = new URL(req.url!, `http://${req.headers.host}`);
-
-  // Extract all necessary parameters from the URL
   const chatId = url.searchParams.get("chatId")!;
   const userId = url.searchParams.get("userId")!;
-  const roomName = url.searchParams.get("name") || `Chat with ${userId}`; // Default name
-  const maxParticipants = parseInt(
-    url.searchParams.get("maxParticipants") || "2",
-    10
-  ); // Default to 2 for 1-on-1 chat
+  // ... other params
 
   chatWs.userId = userId;
-  console.log(
-    `[${chatId}] User '${userId}' attempting to connect to room '${roomName}'...`
-  );
 
-  // --- Room and User Management ---
-  // Get or create the ChatRoom instance. The first user to connect defines the room's properties.
-  if (!chatRooms.has(chatId)) {
-    // For backward compatibility, old clients will default to maxParticipants=2
-    chatRooms.set(chatId, new ChatRoom(chatId, roomName, maxParticipants));
+  // --- Room and User Management with Redis ---
+  const roomExists = await roomRepo.roomExists(chatId);
+  if (!roomExists) {
+      // Auto-create 1-on-1 rooms
+      const roomName = url.searchParams.get("name") || `Chat with ${userId}`;
+      const maxParticipants = parseInt(url.searchParams.get("maxParticipants") || "2", 10);
+      await roomRepo.createRoom(chatId, roomName, maxParticipants);
+      console.log(`[${chatId}] Room auto-created.`);
   }
 
-  const room = chatRooms.get(chatId)!;
-
-  if (room.theme) {
-    const packet: ChangeThemePacket = {
-      type: "change_theme",
-      content: { theme: room.theme, mode: room.mode },
-      sender: "system",
-    };
-    ws.send(JSON.stringify(packet));
+  // Check bans first
+  if (await roomRepo.isUserBanned(chatId, userId)) {
+      ws.close(1008, "You are banned from this room.");
+      return;
   }
-
-  if (room.bannedUsers.has(userId)) {
-    ws.close(1008, "You are banned from this room.");
-    return;
-  }
-
-  // is ip banned?
   const ip = req.socket.remoteAddress;
-  if (ip && room.bannedIps.has(ip)) {
-    ws.close(1008, "Your IP is banned from this room.");
-    return;
+  if(ip && await roomRepo.isIpBanned(chatId, ip)){
+      ws.close(1008, "Your IP is banned from this room.");
+      return;
+  }
+  
+  // --- Manage local connection state ---
+  if (!activeConnections.has(chatId)) {
+      activeConnections.set(chatId, new Map());
+  }
+  const roomConnections = activeConnections.get(chatId)!;
+  if (!roomConnections.has(userId)) {
+      roomConnections.set(userId, new Set());
+  }
+  roomConnections.get(userId)!.add(chatWs);
+  // ---
+
+  // Check if room is full
+  const roomInfo = await roomRepo.getRoomInfo(chatId);
+  const participantCount = await roomRepo.getParticipantCount(chatId);
+  const maxParticipants = parseInt(roomInfo.maxParticipants ?? "2", 10);
+  if (participantCount >= maxParticipants && !(await roomRepo.getParticipantIds(chatId)).includes(userId)) {
+      ws.close(1008, "Room is full.");
+      return;
   }
 
-  const participants: Set<Omit<Participant, "connections">> = new Set();
-  room.participants.forEach((p) => {
-    participants.add({
-      userId: p.userId,
-      nickname: p.nickname,
-    })
-  });
+  // Add user to persistent participant list if they are not already there
+  if (!(await roomRepo.getParticipantIds(chatId)).includes(userId)) {
+      const { generateUserFriendlyName } = await import("./util");
+      await roomRepo.addParticipant(chatId, userId, generateUserFriendlyName());
+  }
 
-  room.nicknames.forEach((nickname, userId) => {
-    if (!participants.has({ userId, nickname })) {
-      participants.add({ userId, nickname });
-    }
-  });
+  console.log(`[${chatId}] User '${userId}' connected.`);
+  
+  // Sync participants to the newly connected client
+  const nicknamesMap = await roomRepo.getNicknames(chatId) as Map<string, string>;
+  const participants: Omit<Participant, "connections">[] = 
+      Array.from(nicknamesMap.entries()).map(([uid, nickname]) => ({ userId: uid, nickname }));
 
-  const participantsSync: ParticipantsSyncPacket = {
-    type: "participants_sync",
-    content: Array.from(participants),
-    sender: "system",
+  ws.send(JSON.stringify({
+      type: "participants_sync",
+      content: participants,
+      sender: "system"
+  } as ParticipantsSyncPacket));
+
+
+  // Broadcast to others that a user has joined
+  const joinedPacket = {
+      type: "participant_joined",
+      content: { userId, nickname: await roomRepo.getNickname(chatId, userId) },
+      sender: "system"
   };
-  ws.send(JSON.stringify(participantsSync));
+  broadcast(chatId, JSON.stringify(joinedPacket), userId);
 
-  try {
-    // Add the user to the room. The ChatRoom class now handles capacity checks.
-    const { isNewUser, userCount } = room.addUser(chatWs);
-    console.log(
-      `[${chatId}] User '${userId}' connected successfully. Room '${
-        room.name
-      }' has ${userCount} user(s) and ${room.getTotalConnectionCount()} total connection(s).`
-    );
 
-    // **BACKWARD COMPATIBILITY**: Only send the specific "partner has connected" message
-    // for legacy 1-on-1 chats. 
-    if (room.maxParticipants === 2 && isNewUser && userCount === 2) {
-      console.log(
-        `[${chatId}] 1-on-1 room now has 2 users. Notifying partner.`
-      );
-      const notification = JSON.stringify({
-        type: "STATUS",
-        message: "Your partner has connected. You can now chat!",
-      });
-      // This broadcast goes to the other user.
-      room.broadcast(chatWs, notification);
-    }
-
-    // Send the participant joined packet to all users in the room
-    const participantNickname = room
-      .nicknames.get(chatWs.userId)
-    if (participantNickname) {
-      const participantJoinedPacket = {
-        type: "participant_joined",
-        content: {
-          userId: chatWs.userId,
-          nickname: participantNickname,
-        },
-        sender: "system",
-      };
-      room.broadcast(chatWs, JSON.stringify(participantJoinedPacket));
-    }
-  } catch (error) {
-    // This catch block handles the case where the room is full.
-    const errorMessage = (error as Error).message;
-    console.error(
-      `[${chatId}] Connection rejected for user '${userId}': ${errorMessage}`
-    );
-    ws.close(1008, errorMessage);
-    return;
-  }
-
-  ws.on("message", (message: Buffer) => {
+  ws.on("message", async (message: Buffer) => {
     const parsedMessage = message.toString();
     try {
       const packet = JSON.parse(parsedMessage);
 
-      if (packet.type === "change_theme") {
-        room.setTheme(packet.content.theme);
-        room.setMode(packet.content.mode);
-      } else if (packet.type === "message") {
-        room.messages.push(packet.content);
+      // Handle different packet types by calling the repository
+      if (packet.type === "message") {
+        await roomRepo.addMessage(chatId, packet.content);
+        // Broadcast to other connections on this and other servers
+        broadcast(chatId, parsedMessage, userId);
       } else if (packet.type === "change_nickname") {
-        const { userId, newNickname } = packet.content;
-        if (userId !== chatWs.userId) {
-          console.warn(
-            `[${chatId}] User '${chatWs.userId}' attempted to change nickname for '${userId}'`
-          );
-          return; // Ignore attempts to change other users' nicknames
-        }
-        // will broadcast to the room
-        room.changeNickname(chatWs.userId, newNickname);
-        console.log(
-          `[${chatId}] User '${chatWs.userId}' changed nickname to '${newNickname}'`
-        );
-        return
+        const { newNickname } = packet.content;
+        await roomRepo.setNickname(chatId, userId, newNickname);
+        // Broadcast the change
+        broadcast(chatId, parsedMessage);
+      } else {
+        // Broadcast other ephemeral packets like typing, theme changes etc.
+        broadcast(chatId, parsedMessage, userId);
       }
 
-      // Broadcast all other packets to other users in the room
-      room.broadcast(chatWs, parsedMessage);
     } catch (e) {
-      console.error(
-        `[${chatId}] Failed to parse message from '${chatWs.userId}':`,
-        e
-      );
+      console.error(`[${chatId}] Failed to parse message from '${userId}':`, e);
     }
   });
 
   // --- Disconnection Handling ---
-  ws.on("close", () => {
-    const room = chatRooms.get(chatId);
-    if (!room) return;
+  ws.on("close", async () => {
+    // Remove from local connections
+    const connections = roomConnections.get(userId);
+    connections?.delete(chatWs);
 
-    room.removeUser(chatWs);
+    // If this was the user's last connection from THIS server instance...
+    if (connections?.size === 0) {
+        roomConnections.delete(userId);
+        if (roomConnections.size === 0) {
+            activeConnections.delete(chatId);
+        }
+        
+        // todo: investigate
+        // Announce user offline status to others in the room
+        // NOTE: This logic might need refinement on multiple servers.
+        // A user might still be connected to another server.
+        // A more robust solution involves a "presence" system using Redis pub/sub or TTL keys.
+        const offlinePacket = { type: "offline", content: userId, sender: "system" };
+        broadcast(chatId, JSON.stringify(offlinePacket));
 
-    const isOneToOneChat = room.maxParticipants === 2;
-    // we only delete the room if it's a 1-on-1 chat and it becomes empty
-    if (room.isEmpty() && isOneToOneChat) {
-      console.log(
-        `[${chatId}] Room '${room.name}' is now empty and has been closed.`
-      );
-      chatRooms.delete(chatId);
+        console.log(`[${chatId}] User '${userId}' has disconnected from this instance.`);
     }
   });
 
-  // --- Error Handling ---
-  ws.on("error", (error) => {
+   ws.on("error", (error) => {
     console.error(
       `[${chatId}] An error occurred for user '${chatWs.userId}':`,
       error
@@ -361,5 +331,5 @@ server.listen(CHAT_SERVER_PORT, () => {
   );
   console.log(`Check status at http://localhost:${CHAT_SERVER_PORT}/status`);
 
-  startServiceRegistration();
+  // startServiceRegistration();
 });
