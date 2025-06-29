@@ -179,6 +179,8 @@ export class ChatRoomRepository {
     );
 
     let theme: ChatThemeV2 | null = null;
+
+    console.log(`[${chatId}] Retrieved theme from Redis:`, themeString, mode);
     
     // Safely parse the theme string if it exists
     if (themeString) {
@@ -197,7 +199,7 @@ export class ChatRoomRepository {
     }
 
     return {
-      theme,
+      theme: null,
       mode: (mode as "light" | "dark") || "light", // Default to 'light' if mode is not set
     };
   }
