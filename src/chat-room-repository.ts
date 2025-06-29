@@ -171,7 +171,7 @@ export class ChatRoomRepository {
   }
 
 
- async getTheme(chatId: string): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }> {
+  async getTheme(chatId: string): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }> {
     const [themeString, mode] = await this.redis.hmget(
       roomKey(chatId, 'info'),
       'theme',
@@ -179,26 +179,23 @@ export class ChatRoomRepository {
     );
 
     let theme: ChatThemeV2 | null = null;
-
-    console.log(`[${chatId}] Retrieved theme from Redis:`, themeString, mode);
     
-    // Safely parse the theme string if it exists
     if (themeString) {
-      if (themeString === "null" || themeString === "{}") {
-        // If the theme is explicitly set to null or an empty object, return null
-        return { theme: null, mode: (mode as "light" | "dark") || "light" };
-      }
-      try {
-        theme = JSON.parse(themeString);
-
-        // if json is an empty object, return null
-        if (theme && Object.keys(theme).length === 0) {
-          theme = null;
+      // Explicitly check for the corrupted "[object Object]" string or null/empty values.
+      if (themeString === '[object Object]' || themeString === "null" || themeString === "{}") {
+        theme = null;
+      } else {
+        try {
+          theme = JSON.parse(themeString);
+          // Also treat a successfully parsed but empty object as null.
+          if (theme && Object.keys(theme).length === 0) {
+            theme = null;
+          }
+        } catch (error) {
+          console.error(`[${chatId}] Failed to parse theme JSON from Redis:`, error);
+          // If parsing fails for any other reason, ensure the theme is null.
+          theme = null; 
         }
-      } catch (error) {
-        console.error(`[${chatId}] Corrupted theme JSON in Redis:`, error);
-        // Return null for theme if parsing fails, but still return the mode
-        theme = null; 
       }
     }
 
