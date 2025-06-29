@@ -8,6 +8,7 @@ import type {
   ChangeThemePacket,
   ChatRoomInfo,
   ChatThemeV2,
+  Message,
   MessagesSyncPacket,
   OfflinePacket,
   Participant,
@@ -72,10 +73,26 @@ app.get("/sync/:chatId", (req, res) => {
     return;
   }
 
+  // only send the last 50 messages and then add a system message (truncated)
+  let messages: Message[] = [];
+  if (room.messages.length > 50) {
+    messages = room.messages.slice(-50);
+    messages.push({
+      type: "system",
+      content: `Truncated to last 50 messages. Total messages: ${room.messages.length}`,
+      sender: "system",
+      created_at: new Date().toISOString(),
+      session_id: chatId,
+      id: `truncated-${Date.now()}`,
+    });
+  } else {
+    messages = room.messages;
+  }
+
   const messagesSyncPacket: MessagesSyncPacket = {
     type: "messages_sync",
     sender: "system",
-    content: room.messages,
+    content: messages
   };
 
   res.json(messagesSyncPacket);
@@ -214,6 +231,20 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         room.setMode(packet.content.mode);
       } else if (packet.type === "message") {
         room.messages.push(packet.content);
+      } else if (packet.type === "change_nickname") {
+        const { userId, newNickname } = packet.content;
+        if (userId !== chatWs.userId) {
+          console.warn(
+            `[${chatId}] User '${chatWs.userId}' attempted to change nickname for '${userId}'`
+          );
+          return; // Ignore attempts to change other users' nicknames
+        }
+        // will broadcast to the room
+        room.changeNickname(chatWs.userId, newNickname);
+        console.log(
+          `[${chatId}] User '${chatWs.userId}' changed nickname to '${newNickname}'`
+        );
+        return
       }
 
       // Broadcast all other packets to other users in the room

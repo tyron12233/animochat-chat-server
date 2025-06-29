@@ -28,6 +28,11 @@ export type Packet<T, K extends string> = {
 // the content is a string (the user id of the user who when offline).
 export type OfflinePacket = Packet<string, "offline">;
 
+export type ChangeNicknamePacket = Packet<{
+  userId: string;
+  newNickname: string;
+}, "change_nickname">;
+
 
 export interface Reaction {
   message_id: string;

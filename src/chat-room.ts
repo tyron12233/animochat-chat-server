@@ -1,11 +1,13 @@
 import WebSocket from "ws";
 import type {
+  ChangeNicknamePacket,
     ChatRoomInfo,
   ChatThemeV2,
   Message,
   OfflinePacket,
   Participant,
   ParticipantJoinedPacket,
+  SystemMessage,
   UserJoinedPacket,
 } from "./types";
 
@@ -234,5 +236,50 @@ export class ChatRoom {
       participants: participantsInfo,
       max_participants: this.maxParticipants,
     };
+  }
+
+  changeNickname(userId: string, newNickname: string): void {
+    const oldNickname = this.nicknames.get(userId);
+
+    // Ensure the new nickname is unique
+    if (this.nicknames.has(newNickname)) {
+      // append a number to the new nickname if it already exists
+      let counter = 1;
+      let uniqueNickname = `${newNickname}${counter}`;
+      while (this.nicknames.has(uniqueNickname)) {
+        counter++;
+        uniqueNickname = `${newNickname}${counter}`;
+      }
+    }
+
+    this.nicknames.set(userId, newNickname);
+
+    let message = `A user changed their nickname to ${newNickname}.`;
+    if (oldNickname) {
+      message = `${oldNickname} changed their nickname to ${newNickname}.`;
+    }
+
+
+    const systemMessage: SystemMessage = {
+      type: "system",
+      content: message,
+      created_at: new Date().toISOString(),
+      id: "system_" + new Date().toISOString(),
+      sender: "system",
+      session_id: this.chatId,
+    }
+    this.messages.push(systemMessage);
+    this.broadcastToAll(JSON.stringify(systemMessage));
+
+    
+    const packet: ChangeNicknamePacket = {
+      type: "change_nickname",
+      content: {
+        userId,
+        newNickname,
+      },
+      sender: userId,
+    }
+    this.broadcastToAll(JSON.stringify(packet));
   }
 }
