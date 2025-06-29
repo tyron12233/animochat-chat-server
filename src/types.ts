@@ -10,6 +10,12 @@ export interface ChatRoomInfo {
   max_participants: number;
 }
 
+export interface PublicRoomInfo {
+  id: string;
+  name: string;
+  max_participants: number;
+}
+
 export interface Participant {
   connections: Set<WebSocket>;
   userId: string;

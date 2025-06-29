@@ -61,10 +61,30 @@ function broadcast(chatId: string, message: string, excludeUserId?: string) {
 addStatusEndPoint(app, roomRepo, activeConnections);
 
 app.get("/rooms", async (req, res) => {
-  // Logic to get public rooms needs to be implemented in the repository
-  const rooms = await roomRepo.listPublicRooms(); // Assuming this method exists
-  res.json(rooms);
+  // 1. Fetch the list of public rooms with their persistent data
+  const publicRooms = await roomRepo.listPublicRooms();
+
+  // 2. Enrich the list with the live participant count from this server instance
+  const roomsWithOnlineCount = publicRooms.map((room) => {
+    // Get the map of users for this specific room from activeConnections
+    const roomConnections = activeConnections.get(room.id);
+    
+    // The number of online users is the number of keys (user IDs) in that map.
+    // If the room has no active connections on this server, the count is 0.
+    const onlineParticipants = roomConnections ? roomConnections.size : 0;
+
+    // 3. Return the final combined object
+    return {
+      id: room.id,
+      name: room.name,
+      max_participants: room.max_participants,
+      participants: onlineParticipants, // This now reflects the online user count
+    };
+  });
+
+  res.json(roomsWithOnlineCount);
 });
+
 
 app.post("/create-room", async (req, res) => {
   const { name, maxParticipants } = req.body;
