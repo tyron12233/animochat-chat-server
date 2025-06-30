@@ -65,6 +65,12 @@ const unregisterService = async () => {
 };
 
 export async function startServiceRegistration() {
+  if (process.env.DEBUG === "true") {
+    console.log(
+      "Service registration is disabled in debug mode. Skipping registration."
+    );
+    return;
+  }
     await registerService();
 
     setInterval(registerService, 10000);
