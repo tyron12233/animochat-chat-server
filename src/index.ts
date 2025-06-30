@@ -301,14 +301,14 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     status?: "online" | "offline";
   } 
 
-  // optimization, we only need to send the participants who messaged 
-  const messages = await roomRepo.getMessages(chatId, 0, 100);
+
   const participantsWhoMessaged = new Set<string>();
-  messages.forEach((message) => {
-    if (message.sender && message.sender !== "system") {
-      participantsWhoMessaged.add(message.sender);
-    }
-  });
+
+  roomRepo.getParticipantIds(chatId)
+    .then((participantIds) => {
+      // Add all participants who have messaged in the room
+      participantIds.forEach((uid) => participantsWhoMessaged.add(uid));
+    })
 
   // add those who are currently online
   const onlineParticipants = Array.from(roomConnections.keys()).filter(
