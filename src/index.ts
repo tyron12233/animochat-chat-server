@@ -19,6 +19,7 @@ import addStatusEndPoint, {
   startServiceRegistration,
 } from "./service";
 import type { ChatWebSocket } from "./chat-room";
+import authMiddleware from "./auth-middleware";
 
 dotenv.config();
 
@@ -109,8 +110,18 @@ app.post("/create-room", async (req, res) => {
   res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
-app.post("/ban/:chatId/:userId", async (req, res) => {
+app.post("/ban/:chatId/:userId", authMiddleware, async (req, res): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: "Authentication required. No token provided." });
+    return;
+  }
+
   const { chatId, userId } = req.params;
+  if (!chatId || !userId) {
+    res.status(400).json({ error: "Chat ID and User ID are required" });
+    return;
+  }
 
   if (!(await roomRepo.roomExists(chatId))) {
     res.status(404).json({ error: "Chat room not found" });
