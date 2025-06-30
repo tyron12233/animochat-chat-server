@@ -245,6 +245,8 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     return;
   }
 
+
+
   // --- Manage local connection state ---
   if (!activeConnections.has(chatId)) {
     activeConnections.set(chatId, new Map());
@@ -253,20 +255,20 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   if (!roomConnections.has(userId)) {
     roomConnections.set(userId, new Set());
   }
-  roomConnections.get(userId)!.add(chatWs);
-  // ---
 
-  // Check if room is full
   const roomInfo = await roomRepo.getRoomInfo(chatId);
-  const participantCount = await roomRepo.getParticipantCount(chatId);
+  const onlineCount = roomConnections.get(userId)?.size || 0;
   const maxParticipants = parseInt(roomInfo.maxParticipants ?? "2", 10);
   if (
-    participantCount >= maxParticipants &&
+    onlineCount >= maxParticipants &&
     !(await roomRepo.getParticipantIds(chatId)).includes(userId)
   ) {
     ws.close(1008, "Room is full.");
     return;
   }
+
+  roomConnections.get(userId)!.add(chatWs);
+  
 
   // Add user to persistent participant list if they are not already there
   if (!(await roomRepo.getParticipantIds(chatId)).includes(userId)) {
