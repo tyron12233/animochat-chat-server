@@ -63,12 +63,24 @@ app.get("/rooms", async (req, res) => {
   const publicRooms = await roomRepo.listPublicRooms();
   const roomsWithOnlineCount = publicRooms.map((room) => {
     const roomConnections = activeConnections.get(room.id);
-    const onlineParticipants = roomConnections ? roomConnections.size : 0;
+
+    // Count how many users are currently connected to this room on THIS server instance
+
+
+    const onlineParticipants = roomConnections ? roomConnections.values() : [];
+    
+    function isOnline(connections: Set<WebSocket>): boolean {
+      return connections.size > 0 && Array.from(connections).some(conn => conn.readyState === WebSocket.OPEN);
+    }
+
+    const onlineCount = Array.from(onlineParticipants).filter(isOnline).length;
+    
+
     return {
       id: room.id,
       name: room.name,
       max_participants: room.max_participants,
-      participants: onlineParticipants,
+      participants: onlineCount,
     };
   });
   res.json(roomsWithOnlineCount);
