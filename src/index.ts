@@ -200,6 +200,28 @@ app.get("/sync/:chatId", async (req, res) => {
     }
   }
 
+  let nickanmeMap: Map<string, string> = new Map();
+
+  // for each of the messages, we add senderNickname property to it
+  messages = await Promise.all(
+    messages.map(async (message) => {
+      if (message.sender && message.sender !== "system") {
+        if (!nickanmeMap.has(message.sender)) {
+          const nickname = await roomRepo.getNickname(chatId, message.sender);
+          nickanmeMap.set(message.sender, nickname || "[Unknown]");
+        }
+        return {
+          ...message,
+          senderNickname: nickanmeMap.get(message.sender) || "[Unknown]",
+        };
+      } else {
+        return {
+          ...message,
+        };
+      }
+    })
+  );
+
   const messagesSyncPacket: MessagesSyncPacket = {
     type: "messages_sync",
     sender: "system",
@@ -208,10 +230,31 @@ app.get("/sync/:chatId", async (req, res) => {
 
   const themeInfo = await roomRepo.getTheme(chatId);
 
+  // online participants
+  const roomConnections = activeConnections.get(chatId) || new Map<string, Set<WebSocket>>();
+  const onlineParticipants: Omit<Participant, "connections">[] = Array.from(
+    roomConnections.entries()
+  )
+    .filter(([userId, connections]) => {
+      // Only include users with at least one open connection
+      return (
+        connections.size > 0 &&
+        Array.from(connections).some(
+          (conn) => conn.readyState === WebSocket.OPEN
+        )
+      );
+    })
+    .map(([userId, connections]) => ({
+      userId,
+      nickname: nickanmeMap.get(userId) || "[Unknown]",
+      status: "online",
+    }));
+
   res.json({
     theme: themeInfo.theme || null,
     mode: themeInfo.mode || "light",
     messages: messagesSyncPacket,
+    onlineParticipants: onlineParticipants,
   });
 });
 
@@ -297,58 +340,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
   console.log(`[${chatId}] User '${userId}' connected.`);
 
-  type ParticipantWithStatus = Omit<Participant, "connections"> & {
-    status?: "online" | "offline";
-  } 
-
-
-  const participantsWhoMessaged = new Set<string>();
-
-  roomRepo.getParticipantIds(chatId)
-    .then((participantIds) => {
-      // Add all participants who have messaged in the room
-      participantIds.forEach((uid) => participantsWhoMessaged.add(uid));
-    })
-
-  // add those who are currently online
-  const onlineParticipants = Array.from(roomConnections.keys()).filter(
-    (uid) => roomConnections.get(uid)?.size
-  );
-  onlineParticipants.forEach((uid) => participantsWhoMessaged.add(uid));
-
-  // Fetch nicknames for participants who have messaged
-  const nicknamesMap: Map<string, string> = new Map();
-  for (const uid of participantsWhoMessaged) {
-    const nickname = await roomRepo.getNickname(chatId, uid);
-    if (nickname) {
-      nicknamesMap.set(uid, nickname);
-    }
-  }
-
-  // Determine online/offline status for each participant
-  const roomConnectionsMap: Map<string, Set<ChatWebSocket>> = activeConnections.get(chatId) || new Map();
-
-  const participants: ParticipantWithStatus[] = Array.from(
-    nicknamesMap.entries()
-  ).map(([uid, nickname]) => ({
-    userId: uid,
-    nickname,
-    status:
-      roomConnectionsMap.has(uid) &&
-      Array.from(roomConnectionsMap.get(uid)!).some(
-        (conn) => conn.readyState === WebSocket.OPEN
-      )
-        ? "online"
-        : "offline",
-  }));
-
-  ws.send(
-    JSON.stringify({
-      type: "participants_sync",
-      content: participants,
-      sender: "system",
-    } as ParticipantsSyncPacket)
-  );
 
   // Broadcast to others that a user has joined
   const joinedPacket = {
