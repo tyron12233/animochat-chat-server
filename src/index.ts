@@ -302,6 +302,12 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         const { mode, theme } = (packet as ChangeThemePacket).content;
         await roomRepo.setTheme(chatId, theme, mode);
         broadcast(chatId, parsedMessage);
+      } else  if (packet.type === "disconnect") {
+        if (roomInfo.maxParticipants && parseInt(roomInfo.maxParticipants) > 2) {
+          await roomRepo.markClosed(chatId);
+          console.log(`[${chatId}] Room marked as closed due to disconnect.`);
+        }
+        broadcast(chatId, parsedMessage);
       } else {
         // Broadcast other ephemeral packets like typing, theme changes etc.
         broadcast(chatId, parsedMessage, userId);
@@ -370,6 +376,13 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         console.log(
           `[${chatId}] Room is now empty. Removed from activeConnections.`
         );
+
+        const roomInfo = await roomRepo.getRoomInfo(chatId);
+        const maxParticipants = parseInt(roomInfo.maxParticipants ?? "0", 10);
+        const roomClosed = await roomRepo.isRoomClosed(chatId);
+        if (maxParticipants === 2 && roomClosed) {
+          await roomRepo.deleteRoom(chatId);
+        }
       }
     }
   });

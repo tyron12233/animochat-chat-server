@@ -13,6 +13,20 @@ export class ChatRoomRepository {
 
   // --- Room Management ---
 
+  // mark this room is closed
+  // e.g when a 1-on-1 chat is closed, we mark it as closed
+  // so that it can be deleted when the last participant leaves.
+  async markClosed(chatId: string) {
+    const key = roomKey(chatId, "info");
+    return this.redis.hset(key, "closed", "true");
+  }
+
+  async isRoomClosed(chatId: string): Promise<boolean> {
+    const key = roomKey(chatId, "info");
+    const closed = await this.redis.hget(key, "closed");
+    return closed === "true";
+  }
+
   async createRoom(chatId: string, name: string, maxParticipants: number) {
     const key = roomKey(chatId, "info");
     // HSET sets multiple fields in a hash.
@@ -24,6 +38,26 @@ export class ChatRoomRepository {
       mode: "light",
     });
   }
+
+    
+  async deleteRoom(chatId: string) {
+    const keysToDelete = [
+      roomKey(chatId, "info"),
+      roomKey(chatId, "messages"),
+      roomKey(chatId, "participants"),
+      roomKey(chatId, "nicknames"),
+      roomKey(chatId, "banned_users"),
+      roomKey(chatId, "banned_ips"),
+    ];
+    
+    const pipeline = this.redis.pipeline();
+    pipeline.del(...keysToDelete); // Delete all room-specific data
+    pipeline.srem("public_rooms", chatId); // Remove from public list just in case
+    
+    await pipeline.exec();
+    console.log(`[${chatId}] DELETED room from Redis because it was a 1-on-1 and is now empty.`);
+  }
+
 
   async roomExists(chatId: string): Promise<boolean> {
     const key = roomKey(chatId, "info");
@@ -75,7 +109,7 @@ export class ChatRoomRepository {
     const key = roomKey(chatId, "messages");
     await this.redis.lpush(key, JSON.stringify(message));
 
-    // LTRIM keeps the elements from index 0 to 99 (100 total).
+    // LTRIM keeps the elements from in x 0 to 99 (100 total).
     // Since LPUSH adds to the front, this automatically discards the oldest messages.
     await this.redis.ltrim(key, 0, 99);
   }
