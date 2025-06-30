@@ -308,7 +308,13 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     if (message.sender && message.sender !== "system") {
       participantsWhoMessaged.add(message.sender);
     }
-  });;
+  });
+
+  // add those who are currently online
+  const onlineParticipants = Array.from(roomConnections.keys()).filter(
+    (uid) => roomConnections.get(uid)?.size
+  );
+  onlineParticipants.forEach((uid) => participantsWhoMessaged.add(uid));
 
   // Fetch nicknames for participants who have messaged
   const nicknamesMap: Map<string, string> = new Map();
