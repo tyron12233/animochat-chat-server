@@ -60,27 +60,17 @@ function broadcast(chatId: string, message: string, excludeUserId?: string) {
 addStatusEndPoint(app, roomRepo, activeConnections);
 
 app.get("/rooms", async (req, res) => {
-  // 1. Fetch the list of public rooms with their persistent data
   const publicRooms = await roomRepo.listPublicRooms();
-
-  // 2. Enrich the list with the live participant count from this server instance
   const roomsWithOnlineCount = publicRooms.map((room) => {
-    // Get the map of users for this specific room from activeConnections
     const roomConnections = activeConnections.get(room.id);
-
-    // The number of online users is the number of keys (user IDs) in that map.
-    // If the room has no active connections on this server, the count is 0.
     const onlineParticipants = roomConnections ? roomConnections.size : 0;
-
-    // 3. Return the final combined object
     return {
       id: room.id,
       name: room.name,
       max_participants: room.max_participants,
-      participants: onlineParticipants, // This now reflects the online user count
+      participants: onlineParticipants,
     };
   });
-
   res.json(roomsWithOnlineCount);
 });
 
@@ -181,8 +171,8 @@ app.get("/sync/:chatId", async (req, res) => {
   res.json({
     theme: themeInfo.theme || null,
     mode: themeInfo.mode || "light",
-    messages: messagesSyncPacket,  
-  })
+    messages: messagesSyncPacket,
+  });
 });
 
 // --- WebSocket Upgrade Handling (No changes needed) ---
@@ -323,32 +313,64 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
   // --- Disconnection Handling ---
   ws.on("close", async () => {
-    // Remove from local connections
-    const connections = roomConnections.get(userId);
-    connections?.delete(chatWs);
+    const userId = chatWs.userId;
+    if (!userId) {
+      console.warn(`[${chatId}] Disconnected WebSocket without userId.`);
+      return;
+    }
 
-    // If this was the user's last connection from THIS server instance...
-    if (connections?.size === 0) {
+    const roomConnections = activeConnections.get(chatId);
+    if (!roomConnections) {
+      console.log(
+        `[${chatId}] Room not in activeConnections on disconnect for user ${userId}. Already cleared.`
+      );
+      return;
+    }
+
+    const userConnectionSet = roomConnections.get(userId);
+    if (!userConnectionSet) {
+      console.warn(
+        `[${chatId}] User ${userId} not in roomConnections on disconnect.`
+      );
+      return;
+    }
+
+    userConnectionSet.delete(chatWs);
+    console.log(
+      `[${chatId}] Removed one connection for user ${userId}. Remaining on this instance: ${userConnectionSet.size}`
+    );
+
+    // If this was the user's VERY LAST connection on THIS server instance...
+    if (userConnectionSet.size === 0) {
+      console.log(
+        `[${chatId}] User ${userId} has no more connections on this instance. Cleaning up.`
+      );
+
+      // Remove the user from this instance's room tracking.
+      // This is the action that makes the participant count go down.
       roomConnections.delete(userId);
-      if (roomConnections.size === 0) {
-        activeConnections.delete(chatId);
-      }
 
-      // todo: investigate
-      // Announce user offline status to others in the room
-      // NOTE: This logic might need refinement on multiple servers.
-      // A user might still be connected to another server.
-      // A more robust solution involves a "presence" system using Redis pub/sub or TTL keys.
+      // Announce user offline status to others in the room.
+      // NOTE: In a multi-server setup, a user might still be connected to another server.
+      // A robust global presence system would use Redis Pub/Sub to coordinate this.
+      // For a single instance, this is correct.
       const offlinePacket = {
         type: "offline",
         content: userId,
         sender: "system",
       };
       broadcast(chatId, JSON.stringify(offlinePacket));
-
       console.log(
-        `[${chatId}] User '${userId}' has disconnected from this instance.`
+        `[${chatId}] User '${userId}' fully disconnected from instance. Broadcast 'offline'.`
       );
+
+      // If the room is now empty on this instance, clean it up from memory.
+      if (roomConnections.size === 0) {
+        activeConnections.delete(chatId);
+        console.log(
+          `[${chatId}] Room is now empty. Removed from activeConnections.`
+        );
+      }
     }
   });
 
