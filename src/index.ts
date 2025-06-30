@@ -98,7 +98,7 @@ app.get("/", (req, res) => {
 
 app.post("/create-room", authMiddleware, async (req, res) => {
   if ((req as any)?.user?.role !== "admin") {
-    res.status(403).json({ error: "Only admins can ban users" });
+    res.status(403).json({ error: "Only admins can create rooms for now :p" });
     return;
   }
 
