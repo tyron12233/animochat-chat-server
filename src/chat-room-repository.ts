@@ -263,4 +263,5 @@ export class ChatRoomRepository {
     } while (cursor !== "0");
     return roomIds;
   }
+
 }

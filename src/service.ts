@@ -118,7 +118,6 @@ export default function addStatusEndPoint(
         allRoomIds.map(async (chatId: string) => {
             const participants = await roomRepo.getParticipantCount(chatId);
             const info = await roomRepo.getRoomInfo(chatId);
-            const theme = info.theme ? JSON.parse(info.theme) : undefined;
             
             // Calculate connections for THIS instance
             let totalConnections = 0;
@@ -133,7 +132,6 @@ export default function addStatusEndPoint(
                 chatId,
                 participants,
                 totalConnections, // Note: This is connections to THIS server instance only
-                theme: theme,
             };
         })
     );
