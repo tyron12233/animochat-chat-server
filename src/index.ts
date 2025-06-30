@@ -93,7 +93,7 @@ app.get("/", (req, res) => {
   })
 })
 
-app.post("/create-room", async (req, res) => {
+app.post("/create-room", authMiddleware, async (req, res) => {
   const { name, maxParticipants } = req.body;
   if (!name || !maxParticipants) {
     res.status(400).json({ error: "Name and maxParticipants are required" });
