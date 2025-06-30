@@ -67,15 +67,18 @@ app.get("/rooms", async (req, res) => {
 
     // Count how many users are currently connected to this room on THIS server instance
 
-
     const onlineParticipants = roomConnections ? roomConnections.values() : [];
-    
+
     function isOnline(connections: Set<WebSocket>): boolean {
-      return connections.size > 0 && Array.from(connections).some(conn => conn.readyState === WebSocket.OPEN);
+      return (
+        connections.size > 0 &&
+        Array.from(connections).some(
+          (conn) => conn.readyState === WebSocket.OPEN
+        )
+      );
     }
 
     const onlineCount = Array.from(onlineParticipants).filter(isOnline).length;
-    
 
     return {
       id: room.id,
@@ -90,10 +93,15 @@ app.get("/rooms", async (req, res) => {
 app.get("/", (req, res) => {
   res.status(200).json({
     message: "what are you trying to do here? :p",
-  })
-})
+  });
+});
 
 app.post("/create-room", authMiddleware, async (req, res) => {
+  if ((req as any)?.user?.role !== "admin") {
+    res.status(403).json({ error: "Only admins can ban users" });
+    return;
+  }
+
   const { name, maxParticipants } = req.body;
   if (!name || !maxParticipants) {
     res.status(400).json({ error: "Name and maxParticipants are required" });
@@ -110,48 +118,51 @@ app.post("/create-room", authMiddleware, async (req, res) => {
   res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
-app.post("/ban/:chatId/:userId", authMiddleware, async (req, res): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: "Authentication required. No token provided." });
-    return;
+app.post(
+  "/ban/:chatId/:userId",
+  authMiddleware,
+  async (req, res): Promise<void> => {
+    if ((req as any).user.role !== "admin") {
+      res.status(403).json({ error: "Only admins can ban users" });
+      return;
+    }
+
+    const { chatId, userId } = req.params;
+    if (!chatId || !userId) {
+      res.status(400).json({ error: "Chat ID and User ID are required" });
+      return;
+    }
+
+    if (!(await roomRepo.roomExists(chatId))) {
+      res.status(404).json({ error: "Chat room not found" });
+      return;
+    }
+
+    if (await roomRepo.isUserBanned(chatId, userId)) {
+      res.status(400).json({ error: "User is already banned" });
+      return;
+    }
+
+    await roomRepo.banUser(chatId, userId);
+
+    // Disconnect the user if they are currently connected to this instance
+    const roomConnections = activeConnections.get(chatId);
+    const userConnections = roomConnections?.get(userId);
+    userConnections?.forEach((conn) => {
+      conn.close(1008, "You have been banned from this room.");
+    });
+
+    // Notify others
+    const nickname = await roomRepo.getNickname(chatId, userId);
+    const notification = JSON.stringify({
+      type: "STATUS",
+      message: `${nickname || "A user"} has been banned.`,
+    });
+    broadcast(chatId, notification);
+
+    res.status(200).json({ message: `User ${nickname} has been banned.` });
   }
-
-  const { chatId, userId } = req.params;
-  if (!chatId || !userId) {
-    res.status(400).json({ error: "Chat ID and User ID are required" });
-    return;
-  }
-
-  if (!(await roomRepo.roomExists(chatId))) {
-    res.status(404).json({ error: "Chat room not found" });
-    return;
-  }
-
-  if (await roomRepo.isUserBanned(chatId, userId)) {
-    res.status(400).json({ error: "User is already banned" });
-    return;
-  }
-
-  await roomRepo.banUser(chatId, userId);
-
-  // Disconnect the user if they are currently connected to this instance
-  const roomConnections = activeConnections.get(chatId);
-  const userConnections = roomConnections?.get(userId);
-  userConnections?.forEach((conn) => {
-    conn.close(1008, "You have been banned from this room.");
-  });
-
-  // Notify others
-  const nickname = await roomRepo.getNickname(chatId, userId);
-  const notification = JSON.stringify({
-    type: "STATUS",
-    message: `${nickname || "A user"} has been banned.`,
-  });
-  broadcast(chatId, notification);
-
-  res.status(200).json({ message: `User ${nickname} has been banned.` });
-});
+);
 
 app.get("/sync/:chatId", async (req, res) => {
   const { chatId } = req.params;
@@ -256,8 +267,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     return;
   }
 
-
-
   // --- Manage local connection state ---
   if (!activeConnections.has(chatId)) {
     activeConnections.set(chatId, new Map());
@@ -279,7 +288,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   }
 
   roomConnections.get(userId)!.add(chatWs);
-  
 
   // Add user to persistent participant list if they are not already there
   if (!(await roomRepo.getParticipantIds(chatId)).includes(userId)) {
@@ -333,8 +341,11 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         const { mode, theme } = (packet as ChangeThemePacket).content;
         await roomRepo.setTheme(chatId, theme, mode);
         broadcast(chatId, parsedMessage);
-      } else  if (packet.type === "disconnect") {
-        if (roomInfo.maxParticipants && parseInt(roomInfo.maxParticipants) > 2) {
+      } else if (packet.type === "disconnect") {
+        if (
+          roomInfo.maxParticipants &&
+          parseInt(roomInfo.maxParticipants) > 2
+        ) {
           await roomRepo.markClosed(chatId);
           console.log(`[${chatId}] Room marked as closed due to disconnect.`);
         }
