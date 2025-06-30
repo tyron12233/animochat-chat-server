@@ -173,7 +173,7 @@ app.get("/sync/:chatId", async (req, res) => {
   }
 
   // Fetch the latest 50 messages to display on screen
-  const messagesToDisplay = 50;
+  const messagesToDisplay = 100;
   let messages = await roomRepo.getMessages(chatId, 0, messagesToDisplay - 1);
 
   // Check the total number of persisted messages
@@ -297,14 +297,44 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
   console.log(`[${chatId}] User '${userId}' connected.`);
 
-  // Sync participants to the newly connected client
-  const nicknamesMap = (await roomRepo.getNicknames(chatId)) as Map<
-    string,
-    string
-  >;
-  const participants: Omit<Participant, "connections">[] = Array.from(
+  type ParticipantWithStatus = Omit<Participant, "connections"> & {
+    status?: "online" | "offline";
+  } 
+
+  // optimization, we only need to send the participants who messaged 
+  const messages = await roomRepo.getMessages(chatId, 0, 100);
+  const participantsWhoMessaged = new Set<string>();
+  messages.forEach((message) => {
+    if (message.sender && message.sender !== "system") {
+      participantsWhoMessaged.add(message.sender);
+    }
+  });;
+
+  // Fetch nicknames for participants who have messaged
+  const nicknamesMap: Map<string, string> = new Map();
+  for (const uid of participantsWhoMessaged) {
+    const nickname = await roomRepo.getNickname(chatId, uid);
+    if (nickname) {
+      nicknamesMap.set(uid, nickname);
+    }
+  }
+
+  // Determine online/offline status for each participant
+  const roomConnectionsMap: Map<string, Set<ChatWebSocket>> = activeConnections.get(chatId) || new Map();
+
+  const participants: ParticipantWithStatus[] = Array.from(
     nicknamesMap.entries()
-  ).map(([uid, nickname]) => ({ userId: uid, nickname }));
+  ).map(([uid, nickname]) => ({
+    userId: uid,
+    nickname,
+    status:
+      roomConnectionsMap.has(uid) &&
+      Array.from(roomConnectionsMap.get(uid)!).some(
+        (conn) => conn.readyState === WebSocket.OPEN
+      )
+        ? "online"
+        : "offline",
+  }));
 
   ws.send(
     JSON.stringify({
