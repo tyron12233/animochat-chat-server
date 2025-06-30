@@ -74,6 +74,12 @@ app.get("/rooms", async (req, res) => {
   res.json(roomsWithOnlineCount);
 });
 
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "what are you trying to do here? :p",
+  })
+})
+
 app.post("/create-room", async (req, res) => {
   const { name, maxParticipants } = req.body;
   if (!name || !maxParticipants) {
