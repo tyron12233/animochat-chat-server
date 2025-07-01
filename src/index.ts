@@ -421,7 +421,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
       } else if (packet.type === "disconnect") {
         if (
           roomInfo.maxParticipants &&
-          parseInt(roomInfo.maxParticipants) > 2
+          parseInt(roomInfo.maxParticipants) == 2
         ) {
           await roomRepo.markClosed(chatId);
           console.log(`[${chatId}] Room marked as closed due to disconnect.`);
