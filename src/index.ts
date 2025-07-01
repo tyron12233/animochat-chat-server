@@ -364,6 +364,13 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
       // Handle different packet types by calling the repository
       if (packet.type === "message") {
+        if (!packet.content?.senderNickname) {
+          // If the message does not have a senderNickname, fetch it
+          packet.content.senderNickname = await roomRepo.getNickname(
+            chatId,
+            userId
+          );
+        }
         await roomRepo.addMessage(chatId, packet.content);
         // Broadcast to other connections on this and other servers
         broadcast(chatId, parsedMessage, userId);
