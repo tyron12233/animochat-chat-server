@@ -118,6 +118,39 @@ app.post("/create-room", authMiddleware, async (req, res) => {
   res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
+// send system message
+app.post("/send-system-message", authMiddleware, async (req, res) => {
+  if ((req as any).user.role !== "admin") {
+    res.status(403).json({ error: "Only admins can send system messages" });
+    return;
+  }
+
+  const { chatId, content } = req.body;
+  if (!chatId || !content) {
+    res.status(400).json({ error: "Chat ID and content are required" });
+    return;
+  }
+
+  if (!(await roomRepo.roomExists(chatId))) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  const systemMessage: Message = {
+    type: "system",
+    content,
+    sender: "system",
+    created_at: new Date().toISOString(),
+    session_id: chatId,
+    id: `system-${Date.now()}`,
+  };
+
+  await roomRepo.addMessage(chatId, systemMessage);
+  broadcast(chatId, JSON.stringify(systemMessage));
+
+  res.status(200).json({ message: "System message sent successfully" });
+});
+
 app.post(
   "/ban/:chatId/:userId",
   authMiddleware,
@@ -364,6 +397,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
       // Handle different packet types by calling the repository
       if (packet.type === "message") {
+        const message = packet.content as any;
         if (!packet.content?.senderNickname) {
           // If the message does not have a senderNickname, fetch it
           packet.content.senderNickname = await roomRepo.getNickname(
@@ -372,8 +406,9 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
           );
         }
         await roomRepo.addMessage(chatId, packet.content);
-        // Broadcast to other connections on this and other servers
-        broadcast(chatId, parsedMessage, userId);
+        
+        const parsedPacket = JSON.stringify(packet);
+        broadcast(chatId, parsedPacket, userId);
       } else if (packet.type === "change_nickname") {
         const { newNickname } = packet.content;
         await roomRepo.setNickname(chatId, userId, newNickname);
