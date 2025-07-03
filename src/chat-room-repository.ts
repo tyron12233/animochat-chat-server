@@ -1,5 +1,5 @@
   import { Redis } from "ioredis";
-  import type { Message, ChatThemeV2, Participant, ChatRoomInfo, PublicRoomInfo } from "./types";
+  import type { Message, ChatThemeV2, Participant, ChatRoomInfo, PublicRoomInfo, Reaction } from "./types";
 
   // Helper function for consistent key naming
   const roomKey = (chatId: string, suffix: string) => `chat:${chatId}:${suffix}`;
@@ -104,6 +104,83 @@
     }
 
     // --- Message Management ---
+
+      /**
+   * Add, update, or remove a reaction on a message.
+   * @param chatId   the room ID
+   * @param reaction the reaction payload
+   * @returns        true if message found & updated, false otherwise
+   */
+  async updateReaction(
+    chatId: string,
+    reaction: Reaction
+  ): Promise<boolean> {
+    const key = roomKey(chatId, "messages");
+    // Fetch the entire list (0 = newest)
+    const raw = await this.redis.lrange(key, 0, -1);
+
+    for (let idx = 0; idx < raw.length; idx++) {
+      if (!raw[idx]) continue; // Skip empty entries
+      const msg: Message & { reactions?: Reaction[] } = JSON.parse(raw[idx]!);
+      if (msg.id !== reaction.message_id) continue;
+
+      // Initialize reactions array
+      const reps = msg.reactions ?? [];
+      // Find if this user already reacted
+      const existing = reps.findIndex(r => r.user_id === reaction.user_id);
+
+      let updated: Reaction[];
+      if (existing > -1) {
+        if (reaction.emoji) {
+          // update existing
+          updated = [...reps];
+          updated[existing] = reaction;
+        } else {
+          // remove reaction
+          updated = reps.filter((_, i) => i !== existing);
+        }
+      } else if (reaction.emoji) {
+        // add new
+        updated = [...reps, reaction];
+      } else {
+        // nothing to do
+        updated = reps;
+      }
+
+      msg.reactions = updated;
+      // persist back into the list
+      await this.redis.lset(key, idx, JSON.stringify(msg));
+      return true;
+    }
+
+    return false;
+  }
+
+      /**
+   * Edit a specific message in a room by its message ID.
+   * @param chatId     the room ID
+   * @param messageId  the ID of the message to edit
+   * @param newContent the new text/content of the message
+   * @returns          true if the message was found & updated, false otherwise
+   */
+  async editMessage(
+    chatId: string,
+    messageId: string,
+    newMessage: Message,
+  ): Promise<boolean> {
+    const key = roomKey(chatId, "messages");
+    // Fetch all stored messages (most recent first)
+    const raw = await this.redis.lrange(key, 0, -1);
+    for (let idx = 0; idx < raw.length; idx++) {
+      if (!raw[idx]) continue; 
+      const msg: Message = JSON.parse(raw[idx]!);
+      if (msg.id === messageId) {
+        await this.redis.lset(key, idx, JSON.stringify(newMessage));
+        return true;
+      }
+    }
+    return false;
+  }
 
     async addMessage(chatId: string, message: Message) {
       const key = roomKey(chatId, "messages");

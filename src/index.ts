@@ -454,7 +454,13 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         await roomRepo.addMessage(chatId, packet.content);
         const parsedPacket = JSON.stringify(packet);
         broadcast(chatId, parsedPacket, userId);
-      } else if (packet.type === "change_nickname") {
+      } else if (packet.type === "reaction") {
+        await roomRepo.updateReaction(chatId, packet.content);
+        // Broadcast the reaction update
+        broadcast(chatId, parsedMessage, userId);
+      }
+      
+      else if (packet.type === "change_nickname") {
         const { newNickname } = packet.content;
         await roomRepo.setNickname(chatId, userId, newNickname);
         // Broadcast the change
