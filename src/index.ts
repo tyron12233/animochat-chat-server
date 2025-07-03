@@ -177,7 +177,11 @@ app.post("/send-system-message", authMiddleware, async (req, res) => {
   };
 
   await roomRepo.addMessage(chatId, systemMessage);
-  broadcast(chatId, JSON.stringify(systemMessage));
+  broadcast(chatId, JSON.stringify({
+    type: "message",
+    content: systemMessage,
+    sender: "system",
+  }));
 
   res.status(200).json({ message: "System message sent successfully" });
 });
@@ -232,7 +236,11 @@ app.post(
         type: "system",
       };
       await roomRepo.addMessage(chatId, message);
-      broadcast(chatId, JSON.stringify(message));
+      broadcast(chatId, JSON.stringify({
+        type: "message",
+        content: message,
+        sender: "system",
+      }));
 
       res.status(200).json({ message: `User ${nickname} has been banned.` });
     } catch (error) {
