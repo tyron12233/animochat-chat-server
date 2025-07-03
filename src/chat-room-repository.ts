@@ -156,17 +156,9 @@
     return false;
   }
 
-      /**
-   * Edit a specific message in a room by its message ID.
-   * @param chatId     the room ID
-   * @param messageId  the ID of the message to edit
-   * @param newContent the new text/content of the message
-   * @returns          true if the message was found & updated, false otherwise
-   */
-  async editMessage(
+  async markMessageAsDeleted(
     chatId: string,
-    messageId: string,
-    newMessage: Message,
+    messageId: string
   ): Promise<boolean> {
     const key = roomKey(chatId, "messages");
     // Fetch all stored messages (most recent first)
@@ -175,12 +167,31 @@
       if (!raw[idx]) continue; 
       const msg: Message = JSON.parse(raw[idx]!);
       if (msg.id === messageId) {
-        await this.redis.lset(key, idx, JSON.stringify(newMessage));
+        msg.type = "deleted"; // Mark the message as deleted
+        await this.redis.lset(key, idx, JSON.stringify(msg));
         return true;
       }
     }
     return false;
   }
+
+  async editMessage(chatId: string, messageId: string, newContent: string): Promise<boolean> {
+      const key = roomKey(chatId, "messages");
+      // Fetch all stored messages (most recent first)
+      const raw = await this.redis.lrange(key, 0, -1);
+      for (let idx = 0; idx < raw.length; idx++) {
+        if (!raw[idx]) continue; // Skip empty entries
+        const msg: Message = JSON.parse(raw[idx]!);
+        if (msg.id === messageId) {
+          msg.content = newContent; 
+          msg.edited = true; // Mark as edited
+          await this.redis.lset(key, idx, JSON.stringify(msg));
+          return true;
+        }
+      }
+      return false;
+    }
+
 
     async addMessage(chatId: string, message: Message) {
       const key = roomKey(chatId, "messages");

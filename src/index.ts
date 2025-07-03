@@ -458,8 +458,24 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         await roomRepo.updateReaction(chatId, packet.content);
         // Broadcast the reaction update
         broadcast(chatId, parsedMessage, userId);
+      } else if (packet.type === "message_delete") {
+        const messageId = packet.content;
+        await roomRepo.markMessageAsDeleted(chatId, messageId);
+        // Broadcast the deletion
+        broadcast(
+          chatId,
+          parsedMessage,
+          userId
+        );
+      } else if (packet.type === "edit_message") {
+        await roomRepo.editMessage(
+          chatId,
+          packet.content.message_id,
+          packet.content.new_content
+        );
+        broadcast(chatId, parsedMessage, userId);
       }
-      
+       
       else if (packet.type === "change_nickname") {
         const { newNickname } = packet.content;
         await roomRepo.setNickname(chatId, userId, newNickname);
