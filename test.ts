@@ -11,9 +11,7 @@ async function runCleanup() {
   console.log(`Found ${allRoomIds.length} total rooms.`);
 
   // Filter the list to find only the rooms that need to be deleted.
-  const roomsToDelete = allRoomIds.filter(
-    (id: any) => !id.startsWith("room-")
-  );
+  const roomsToDelete = allRoomIds.filter((id: any) => !id.startsWith("room-"));
 
   if (roomsToDelete.length === 0) {
     console.log("✅ No rooms to clean up. All rooms are correctly prefixed.");
@@ -21,7 +19,9 @@ async function runCleanup() {
     return;
   }
 
-  console.log(`\nFound ${roomsToDelete.length} rooms to delete. Starting cleanup...`);
+  console.log(
+    `\nFound ${roomsToDelete.length} rooms to delete. Starting cleanup...`
+  );
 
   // Loop through the filtered list and delete each room.
   for (const chatId of roomsToDelete) {

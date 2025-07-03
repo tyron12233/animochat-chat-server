@@ -13,7 +13,7 @@ import type {
   Participant,
   ParticipantsSyncPacket,
 } from "./types";
-import { ChatRoomRepository } from "./chat-room-repository"; // Our new repository
+import { ChatRoomRepository } from "./chat-room-repository";
 import addStatusEndPoint, {
   CHAT_SERVER_PORT,
   startServiceRegistration,
@@ -62,7 +62,7 @@ addStatusEndPoint(app, roomRepo, activeConnections);
 
 app.get("/rooms", async (req, res) => {
   const publicRooms = await roomRepo.listPublicRooms();
-  const roomsWithOnlineCount = publicRooms.map((room) => {
+  const roomsWithOnlineCount = publicRooms.map(async (room) => {
     const roomConnections = activeConnections.get(room.id);
 
     // Count how many users are currently connected to this room on THIS server instance
@@ -79,15 +79,19 @@ app.get("/rooms", async (req, res) => {
     }
 
     const onlineCount = Array.from(onlineParticipants).filter(isOnline).length;
+    const recentMessage = await roomRepo.getMessages(room.id, 0, 1);
 
     return {
       id: room.id,
       name: room.name,
       max_participants: room.max_participants,
       participants: onlineCount,
+      recent_message: recentMessage[0]
     };
   });
-  res.json(roomsWithOnlineCount);
+
+  const result = await Promise.all(roomsWithOnlineCount);
+  res.json(result);
 });
 
 app.get("/", (req, res) => {
@@ -118,7 +122,33 @@ app.post("/create-room", authMiddleware, async (req, res) => {
   res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
-// send system message
+app.post("/delete-room", authMiddleware, async (req, res) => {
+  if ((req as any).user.role !== "admin") {
+    res.status(403).json({ error: "Only admins can delete rooms" });
+    return;
+  }
+
+  const { chatId } = req.body;
+  if (!chatId) {
+    res.status(400).json({ error: "Chat ID is required" });
+    return;
+  }
+
+  if (!(await roomRepo.roomExists(chatId))) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  await roomRepo.deleteRoom(chatId);
+
+  // Remove from active connections
+  if (activeConnections.has(chatId)) {
+    activeConnections.delete(chatId);
+  }
+
+  res.status(200).json({ message: "Chat room deleted successfully" });
+});
+
 app.post("/send-system-message", authMiddleware, async (req, res) => {
   if ((req as any).user.role !== "admin") {
     res.status(403).json({ error: "Only admins can send system messages" });
@@ -300,7 +330,6 @@ app.get("/sync/:chatId", async (req, res) => {
   });
 });
 
-// --- WebSocket Upgrade Handling (No changes needed) ---
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url!, `http://${request.headers.host}`);
   const chatId = url.searchParams.get("chatId");
@@ -338,7 +367,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
       10
     );
     await roomRepo.createRoom(chatId, roomName, maxParticipants);
-    console.log(`[${chatId}] Room auto-created.`);
   }
 
   // Check bans first
@@ -392,12 +420,14 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
   ws.on("message", async (message: Buffer) => {
     const parsedMessage = message.toString();
+    if (!parsedMessage) {
+      return;
+    }
     try {
       const packet = JSON.parse(parsedMessage);
 
       // Handle different packet types by calling the repository
       if (packet.type === "message") {
-        const message = packet.content as any;
         if (!packet.content?.senderNickname) {
           // If the message does not have a senderNickname, fetch it
           packet.content.senderNickname = await roomRepo.getNickname(
@@ -406,7 +436,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
           );
         }
         await roomRepo.addMessage(chatId, packet.content);
-        
         const parsedPacket = JSON.stringify(packet);
         broadcast(chatId, parsedPacket, userId);
       } else if (packet.type === "change_nickname") {
@@ -424,7 +453,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
           parseInt(roomInfo.maxParticipants) == 2
         ) {
           await roomRepo.markClosed(chatId);
-          console.log(`[${chatId}] Room marked as closed due to disconnect.`);
         }
         broadcast(chatId, parsedMessage);
       } else {
@@ -446,9 +474,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
 
     const roomConnections = activeConnections.get(chatId);
     if (!roomConnections) {
-      console.log(
-        `[${chatId}] Room not in activeConnections on disconnect for user ${userId}. Already cleared.`
-      );
       return;
     }
 
@@ -461,16 +486,9 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     }
 
     userConnectionSet.delete(chatWs);
-    console.log(
-      `[${chatId}] Removed one connection for user ${userId}. Remaining on this instance: ${userConnectionSet.size}`
-    );
-
+   
     // If this was the user's VERY LAST connection on THIS server instance...
     if (userConnectionSet.size === 0) {
-      console.log(
-        `[${chatId}] User ${userId} has no more connections on this instance. Cleaning up.`
-      );
-
       // Remove the user from this instance's room tracking.
       // This is the action that makes the participant count go down.
       roomConnections.delete(userId);
@@ -485,16 +503,10 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         sender: "system",
       };
       broadcast(chatId, JSON.stringify(offlinePacket));
-      console.log(
-        `[${chatId}] User '${userId}' fully disconnected from instance. Broadcast 'offline'.`
-      );
 
       // If the room is now empty on this instance, clean it up from memory.
       if (roomConnections.size === 0) {
         activeConnections.delete(chatId);
-        console.log(
-          `[${chatId}] Room is now empty. Removed from activeConnections.`
-        );
 
         const roomInfo = await roomRepo.getRoomInfo(chatId);
         const maxParticipants = parseInt(roomInfo.maxParticipants ?? "0", 10);
