@@ -12,6 +12,7 @@ import type {
   MessagesSyncPacket,
   Participant,
   ParticipantsSyncPacket,
+  SystemMessage,
 } from "./types";
 import { ChatRoomRepository } from "./chat-room-repository";
 import addStatusEndPoint, {
@@ -86,7 +87,7 @@ app.get("/rooms", async (req, res) => {
       name: room.name,
       max_participants: room.max_participants,
       participants: onlineCount,
-      recent_message: recentMessage[0]
+      recent_message: recentMessage[0],
     };
   });
 
@@ -205,25 +206,39 @@ app.post(
       res.status(400).json({ error: "User is already banned" });
       return;
     }
+    try {
+      const adminUsername =
+        (await roomRepo.getNickname(chatId, (req as any)?.user?.id || "")) ??
+        "an admin";
 
-    await roomRepo.banUser(chatId, userId);
+      await roomRepo.banUser(chatId, userId);
 
-    // Disconnect the user if they are currently connected to this instance
-    const roomConnections = activeConnections.get(chatId);
-    const userConnections = roomConnections?.get(userId);
-    userConnections?.forEach((conn) => {
-      conn.close(1008, "You have been banned from this room.");
-    });
+      // Disconnect the user if they are currently connected to this instance
+      const roomConnections = activeConnections.get(chatId);
+      const userConnections = roomConnections?.get(userId);
+      userConnections?.forEach((conn) => {
+        conn.close(1008, "You have been banned from this room.");
+      });
 
-    // Notify others
-    const nickname = await roomRepo.getNickname(chatId, userId);
-    const notification = JSON.stringify({
-      type: "STATUS",
-      message: `${nickname || "A user"} has been banned.`,
-    });
-    broadcast(chatId, notification);
+      // Notify others
+      const nickname = await roomRepo.getNickname(chatId, userId);
 
-    res.status(200).json({ message: `User ${nickname} has been banned.` });
+      const message: SystemMessage = {
+        content: `${nickname || "A user"} has been banned by ${adminUsername}.`,
+        created_at: new Date().toISOString(),
+        id: "_system_" + new Date().toISOString(),
+        sender: "system",
+        session_id: chatId,
+        type: "system",
+      };
+      await roomRepo.addMessage(chatId, message);
+      broadcast(chatId, JSON.stringify(message));
+
+      res.status(200).json({ message: `User ${nickname} has been banned.` });
+    } catch (error) {
+      console.log("BAN API: ", error);
+      res.status(500).json({ message: "Unknown error occured." });
+    }
   }
 );
 
@@ -244,7 +259,7 @@ app.get("/sync/:chatId", async (req, res) => {
 
   // If the total message count is greater than the number we are displaying,
   // it means the history is truncated.
-  if (totalMessageCount > messagesToDisplay) {
+  if (totalMessageCount >= messagesToDisplay) {
     // Create the system message
     const truncationMessage: Message = {
       type: "system",
@@ -296,8 +311,8 @@ app.get("/sync/:chatId", async (req, res) => {
   // online participants
   const roomConnections =
     activeConnections.get(chatId) || new Map<string, Set<WebSocket>>();
-  const onlineParticipants = Array.from(roomConnections.entries())
-    .filter(([userId, connections]) => {
+  const onlineParticipants = Array.from(roomConnections.entries()).filter(
+    ([userId, connections]) => {
       // Only include users with at least one open connection
       return (
         connections.size > 0 &&
@@ -305,19 +320,20 @@ app.get("/sync/:chatId", async (req, res) => {
           (conn) => conn.readyState === WebSocket.OPEN
         )
       );
-    });
+    }
+  );
 
   const onlineParticipantsWithNicknames = await Promise.all(
     onlineParticipants.map(async ([userId, connections]) => {
       let nickname = nickanmeMap.get(userId);
       if (!nickname) {
-        nickname = await roomRepo.getNickname(chatId, userId) ?? "Unknown";
+        nickname = (await roomRepo.getNickname(chatId, userId)) ?? "Unknown";
       }
 
       return {
         userId,
         nickname,
-        status: "online"
+        status: "online",
       };
     })
   );
@@ -486,7 +502,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     }
 
     userConnectionSet.delete(chatWs);
-   
+
     // If this was the user's VERY LAST connection on THIS server instance...
     if (userConnectionSet.size === 0) {
       // Remove the user from this instance's room tracking.
