@@ -262,6 +262,25 @@
       return this.redis.hset(roomKey(chatId, "nicknames"), userId, newNickname);
     }
 
+    async setGhostMode(chatId: string, userId: string, isGhost: boolean) {
+      const key = roomKey(chatId, "ghosts");
+      if (isGhost) {
+        return this.redis.sadd(key, userId); 
+      } else {
+        return this.redis.srem(key, userId); 
+      }
+    }
+
+    async isGhostMode(chatId: string, userId: string): Promise<boolean> {
+      const key = roomKey(chatId, "ghosts");
+      return (await this.redis.sismember(key, userId)) === 1; 
+    }
+
+    async getAllGhosts(chatId: string): Promise<string[]> {
+      const key = roomKey(chatId, "ghosts");
+      return this.redis.smembers(key);
+    }
+
     // --- Ban Management ---
 
     async banUser(chatId: string, userId: string) {

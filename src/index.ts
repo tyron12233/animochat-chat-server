@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import type {
   ChangeThemePacket,
   Message,
+  MessagePacket,
   MessagesSyncPacket,
   Participant,
   ParticipantsSyncPacket,
@@ -123,6 +124,36 @@ app.post("/create-room", authMiddleware, async (req, res) => {
   res.status(201).json({ id: chatId, name, max_participants: maxParticipants });
 });
 
+app.post("/ghost-mode", authMiddleware, async (req, res) => {
+  if ((req as any).user.role !== "admin") {
+    res.status(403).json({ error: "Only admins can enable ghost mode" });
+    return;
+  }
+
+  const { chatId, enable } = req.body;
+  if (!chatId || typeof enable !== "boolean") {
+    res.status(400).json({ error: "Chat ID and enable flag are required" });
+    return;
+  }
+
+  if (!(await roomRepo.roomExists(chatId))) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  const userId = (req as any).user.id;
+
+  await roomRepo.setGhostMode(chatId, userId, enable);
+
+  res
+    .status(200)
+    .json({
+      message: `Ghost mode ${
+        enable ? "enabled" : "disabled"
+      } for user ${userId} in room ${chatId}`,
+    });
+});
+
 app.post("/delete-room", authMiddleware, async (req, res) => {
   if ((req as any).user.role !== "admin") {
     res.status(403).json({ error: "Only admins can delete rooms" });
@@ -177,11 +208,14 @@ app.post("/send-system-message", authMiddleware, async (req, res) => {
   };
 
   await roomRepo.addMessage(chatId, systemMessage);
-  broadcast(chatId, JSON.stringify({
-    type: "message",
-    content: systemMessage,
-    sender: "system",
-  }));
+  broadcast(
+    chatId,
+    JSON.stringify({
+      type: "message",
+      content: systemMessage,
+      sender: "system",
+    })
+  );
 
   res.status(200).json({ message: "System message sent successfully" });
 });
@@ -236,11 +270,14 @@ app.post(
         type: "system",
       };
       await roomRepo.addMessage(chatId, message);
-      broadcast(chatId, JSON.stringify({
-        type: "message",
-        content: message,
-        sender: "system",
-      }));
+      broadcast(
+        chatId,
+        JSON.stringify({
+          type: "message",
+          content: message,
+          sender: "system",
+        })
+      );
 
       res.status(200).json({ message: `User ${nickname} has been banned.` });
     } catch (error) {
@@ -331,8 +368,14 @@ app.get("/sync/:chatId", async (req, res) => {
     }
   );
 
+  const ghosts = await roomRepo.getAllGhosts(chatId);
+  // Filter out ghosts from online participants
+  const onlineParticipantsWithoutGhosts = onlineParticipants.filter(
+    ([userId]) => !ghosts.includes(userId)
+  );
+
   const onlineParticipantsWithNicknames = await Promise.all(
-    onlineParticipants.map(async ([userId, connections]) => {
+    onlineParticipantsWithoutGhosts.map(async ([userId, _]) => {
       let nickname = nickanmeMap.get(userId);
       if (!nickname) {
         nickname = (await roomRepo.getNickname(chatId, userId)) ?? "Unknown";
@@ -377,7 +420,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   const url = new URL(req.url!, `http://${req.headers.host}`);
   const chatId = url.searchParams.get("chatId")!;
   const userId = url.searchParams.get("userId")!;
-  // ... other params
 
   chatWs.userId = userId;
 
@@ -424,7 +466,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     return;
   }
 
-  roomConnections.get(userId)!.add(chatWs);
+  roomConnections.get(userId)?.add(chatWs);
 
   // Add user to persistent participant list if they are not already there
   if (!(await roomRepo.getParticipantIds(chatId)).includes(userId)) {
@@ -432,16 +474,15 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     await roomRepo.addParticipant(chatId, userId, generateUserFriendlyName());
   }
 
-  console.log(`[${chatId}] User '${userId}' connected.`);
-
-  // Broadcast to others that a user has joined
-  const joinedPacket = {
-    type: "participant_joined",
-    content: { userId, nickname: await roomRepo.getNickname(chatId, userId) },
-    sender: "system",
-  };
-  broadcast(chatId, JSON.stringify(joinedPacket));
-
+  const isGhost = await roomRepo.isGhostMode(chatId, userId);
+  if (!isGhost) {
+    const joinedPacket = {
+      type: "participant_joined",
+      content: { userId, nickname: await roomRepo.getNickname(chatId, userId) },
+      sender: "system",
+    };
+    broadcast(chatId, JSON.stringify(joinedPacket));
+  }
   ws.on("message", async (message: Buffer) => {
     const parsedMessage = message.toString();
     if (!parsedMessage) {
@@ -470,11 +511,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
         const messageId = packet.content;
         await roomRepo.markMessageAsDeleted(chatId, messageId);
         // Broadcast the deletion
-        broadcast(
-          chatId,
-          parsedMessage,
-          userId
-        );
+        broadcast(chatId, parsedMessage, userId);
       } else if (packet.type === "edit_message") {
         await roomRepo.editMessage(
           chatId,
@@ -482,11 +519,29 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
           packet.content.new_content
         );
         broadcast(chatId, parsedMessage, userId);
-      }
-       
-      else if (packet.type === "change_nickname") {
+      } else if (packet.type === "change_nickname") {
         const { newNickname } = packet.content;
+        const oldNickname = await roomRepo.getNickname(chatId, userId);
+        if (newNickname === oldNickname) {
+          // No change in nickname, just return
+          return;
+        }
         await roomRepo.setNickname(chatId, userId, newNickname);
+
+        const systemMessage: SystemMessage = {
+          type: "system",
+          content: `${oldNickname} is now known as ${newNickname}`,
+          sender: "system",
+          created_at: new Date().toISOString(),
+          session_id: chatId,
+          id: `nickname-change-${Date.now()}`,
+        }
+        broadcast(chatId, JSON.stringify({
+          type: "message",
+          content: systemMessage,
+          sender: "system",
+        }));
+
         // Broadcast the change
         broadcast(chatId, parsedMessage);
       } else if (packet.type === "change_theme") {
@@ -539,10 +594,6 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
       // This is the action that makes the participant count go down.
       roomConnections.delete(userId);
 
-      // Announce user offline status to others in the room.
-      // NOTE: In a multi-server setup, a user might still be connected to another server.
-      // A robust global presence system would use Redis Pub/Sub to coordinate this.
-      // For a single instance, this is correct.
       const offlinePacket = {
         type: "offline",
         content: userId,

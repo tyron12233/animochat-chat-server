@@ -71,7 +71,9 @@ export async function startServiceRegistration() {
     );
     return;
   }
-    await registerService();
+    await registerService().catch((error) => {
+        console.error("Initial service registration failed:", (error as Error).message);
+    });
 
     setInterval(registerService, 10000);
 
