@@ -9,7 +9,7 @@ import { initialize } from "./config/redis";
 import { onConnection } from "./socket";
 import type { ChatWebSocket } from "./chat-room";
 import router from "./routes/routes";
-import addStatusEndPoint from "./service";
+import addStatusEndPoint, { startServiceRegistration } from "./service";
 
 dotenv.config();
 
@@ -52,4 +52,6 @@ addStatusEndPoint(app);
 
 server.listen(process.env.PORT || 3000, () => {
     console.log(`🚀 Server is running on port ${process.env.PORT || 3000}`);
+
+    startServiceRegistration();
 });
