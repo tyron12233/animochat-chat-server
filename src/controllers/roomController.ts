@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import { getChatRoomRepository } from "../config/redis";
 
 import * as userStore from "../userStore";
-import type { Message, MessagesSyncPacket } from "../types";
+import type { Message, MessagePacket, MessagesSyncPacket, SystemMessage } from "../types";
+import { broadcastToRoom } from "../socket/broadcast";
 
 /**
  * @description Get all chat rooms
@@ -133,6 +134,71 @@ export async function syncChatRoom(req: Request, res: Response) {
     messages: messagesSyncPacket,
     onlineParticipants: onlineParticipantsWithNicknames,
   });
+}
+
+export async function banUser(req: Request, res: Response) {
+  const roomRepo = getChatRoomRepository();
+  
+  if ((req as any).user.role !== "admin") {
+    res.status(403).json({ error: "Only admins can ban users" });
+    return;
+  }
+
+  const { chatId, userId } = req.params;
+  if (!chatId || !userId) {
+    res.status(400).json({ error: "Chat ID and User ID are required" });
+    return;
+  }
+
+  if (!(await roomRepo.roomExists(chatId))) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  if (await roomRepo.isUserBanned(chatId, userId)) {
+    res.status(400).json({ error: "User is already banned" });
+    return;
+  }
+  try {
+    const adminUsername =
+      (await roomRepo.getNickname(chatId, (req as any)?.user?.id || "")) ??
+      "an admin";
+
+    await roomRepo.banUser(chatId, userId);
+
+    userStore.getSocketsInRoom(chatId)?.forEach((socket) => {
+        if (socket.userId === userId) {
+          // Close the socket connection for the banned user
+          socket.close(1010, "You have been banned from this room.");
+        }
+    });
+
+    // Notify others
+    const nickname = await roomRepo.getNickname(chatId, userId);
+
+    const message: SystemMessage = {
+      content: `${nickname || "A user"} has been banned by ${adminUsername}.`,
+      created_at: new Date().toISOString(),
+      id: "_system_" + new Date().toISOString(),
+      sender: "system",
+      session_id: chatId,
+      type: "system",
+    };
+    await roomRepo.addMessage(chatId, message);
+    broadcastToRoom(
+      chatId,
+      {
+        type: "message",
+        content: message,
+        sender: "system",
+      } as MessagePacket,
+    );
+
+    res.status(200).json({ message: `User ${nickname} has been banned.` });
+  } catch (error) {
+    console.log("BAN API: ", error);
+    res.status(500).json({ message: "Unknown error occured." });
+  }
 }
 
 export async function deleteRoom(req: Request, res: Response) {

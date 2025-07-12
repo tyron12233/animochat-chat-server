@@ -1,5 +1,6 @@
 // src/store/userStore.ts
 import { WebSocket } from 'ws';
+import type { ChatWebSocket } from './chat-room';
 
 interface User {
   id: string;
@@ -11,13 +12,13 @@ interface SocketInfo {
 }
 
 // roomId -> (userId -> WebSocket[])
-const rooms = new Map<string, Map<string, WebSocket[]>>();
+const rooms = new Map<string, Map<string, ChatWebSocket[]>>();
 // WebSocket -> { userId, roomId }
-const socketToInfo = new Map<WebSocket, SocketInfo>();
+const socketToInfo = new Map<ChatWebSocket, SocketInfo>();
 
-export function addUserToRoom(ws: WebSocket, userId: string, roomId: string): void {
+export function addUserToRoom(ws: ChatWebSocket, userId: string, roomId: string): void {
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, new Map<string, WebSocket[]>());
+    rooms.set(roomId, new Map<string, ChatWebSocket[]>());
   }
   const roomUsers = rooms.get(roomId)!;
 
@@ -30,7 +31,7 @@ export function addUserToRoom(ws: WebSocket, userId: string, roomId: string): vo
   socketToInfo.set(ws, { userId, roomId });
 }
 
-export function removeUser(ws: WebSocket): SocketInfo | undefined {
+export function removeUser(ws: ChatWebSocket): SocketInfo | undefined {
   const info = socketToInfo.get(ws);
   if (!info) return;
 
@@ -60,7 +61,7 @@ export function getOnlineUsersInRoom(roomId: string): User[] {
   return roomUsers ? Array.from(roomUsers.keys()).map(id => ({ id })) : [];
 }
 
-export function getSocketsInRoom(roomId: string): WebSocket[] {
+export function getSocketsInRoom(roomId: string): ChatWebSocket[] {
   const roomUsers = rooms.get(roomId);
   if (!roomUsers) return [];
   // Flatten the map of users and their socket arrays into a single array of WebSockets
