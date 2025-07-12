@@ -4,6 +4,7 @@ import type { Packet } from "../types";
 import * as roomHandler from './handlers/roomHandler';
 import type { ChatWebSocket } from "../chat-room";
 import { handleChangeNickname, handleDeleteMessage, handleEditMessage, handleReaction, handleSendMessage } from "./handlers/messageHandler";
+import { broadcastToRoom } from "./broadcast";
 
 // Define a type for our packet handlers
 type PacketHandler = (ws: ChatWebSocket, payload: any) => void;
@@ -40,6 +41,10 @@ export async function onConnection(ws: ChatWebSocket, chatId: string) {
                 handler(ws, message.content);
             } else {
                 console.warn(`No handler found for packet type: ${message.type}`);
+
+                // for unhandled packets, we will just forward them to all participants
+                // unsecure for now, but we can improve this later
+                broadcastToRoom(ws.chatId, message, ws);
             }
         } catch (error) {
             console.error('Error processing message:', error);
