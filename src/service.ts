@@ -1,7 +1,8 @@
 import os from "os";
 import {type Express } from "express";
 import type { ChatWebSocket } from "./chat-room";
-import type { ChatRoomRepository } from "./chat-room-repository";
+import { getChatRoomRepository } from "./config/redis";
+import * as userStore from "./userStore";
 
 
 export const CHAT_SERVER_PORT = process.env.PORT
@@ -88,17 +89,13 @@ export async function startServiceRegistration() {
         process.exit();
     });
 }
-
-type ActiveConnectionsMap = Map<string, Map<string, Set<ChatWebSocket>>>;
  
 
 export default function addStatusEndPoint(
   app: Express,
-  // MODIFICATION: Changed function signature to accept the repository and connections map
-  roomRepo: ChatRoomRepository,
-  activeConnections: ActiveConnectionsMap
 ) {
-  // MODIFICATION: The entire handler is now async to await data from Redis
+  const roomRepo = getChatRoomRepository();
+
   app.get("/status", async (req, res) => {
     // --- Helper Functions for Metrics (Unchanged) ---
      const formatBytes = (bytes: number): string => {
@@ -125,15 +122,12 @@ export default function addStatusEndPoint(
     const roomsData = await Promise.all(
         allRoomIds.map(async (chatId: string) => {
             const participants = await roomRepo.getParticipantCount(chatId);
-            const info = await roomRepo.getRoomInfo(chatId);
             
             // Calculate connections for THIS instance
             let totalConnections = 0;
-            const roomConnections = activeConnections.get(chatId);
+            const roomConnections = userStore.getSocketsInRoom(chatId);;
             if (roomConnections) {
-                for (const userConnections of roomConnections.values()) {
-                    totalConnections += userConnections.size;
-                }
+                totalConnections = roomConnections.length;
             }
 
             return {

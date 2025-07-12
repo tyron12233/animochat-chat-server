@@ -22,26 +22,6 @@ export interface Participant {
   nickname: string;
 }
 
-export type UserJoinedPacket = Packet<string, "user_joined">;
-
-export type Packet<T, K extends string> = {
-  type: K;
-  content: T;
-  sender: string;
-};
-
-
-export type BanPacket = Packet<string, "ban">;
-// This packet is used when the user is offline or not connected.
-// the content is a string (the user id of the user who when offline).
-export type OfflinePacket = Packet<string, "offline">;
-
-export type ChangeNicknamePacket = Packet<{
-  userId: string;
-  newNickname: string;
-}, "change_nickname">;
-
-
 export interface Reaction {
   message_id: string;
   user_id: string;
@@ -53,6 +33,7 @@ interface BaseMessage {
   session_id: string;
   created_at: string; // ISO string
   edited?: boolean;
+  senderNickname?: string; 
 }
 
 export interface SystemMessage extends BaseMessage {
@@ -71,23 +52,7 @@ export interface UserMessage extends BaseMessage {
 
 export type Message = UserMessage | SystemMessage;
 
-export type MessagesSyncPacket = Packet<Message[], "messages_sync">;
-export type ParticipantsSyncPacket = Packet<Omit<Participant, "connections">[], "participants_sync">;
-export type ParticipantJoinedPacket = Packet<Participant, "participant_joined">;
 
-
-export type MessagePacket = Packet<UserMessage, "message">;
-export type ReactionPacket = Packet<Reaction, "reaction">;
-export type TypingPacket = Packet<boolean, "typing">;
-export type EditMessagePacket = Packet<
-  { message_id: string; new_content: string; user_id: string },
-  "edit_message"
->;
-export type DisconnectPacket = Packet<null, "disconnect">;
-export type ChangeThemePacket = Packet<{
-  mode: "light" | "dark";
-  theme: ChatThemeV2
-}, "change_theme">;
 
 export interface ColorScheme {
   light: string;
@@ -206,3 +171,55 @@ export interface ChatThemeV2 {
     typingIndicatorDots: ColorScheme;
   };
 }
+
+
+
+
+
+// PACKETS
+
+export interface Packet<T, K extends String> {
+  type: string;
+  content: T;
+  sender: string;
+};
+
+
+
+export type BanPacket = Packet<string, "ban">;
+// This packet is used when the user is offline or not connected.
+// the content is a string (the user id of the user who when offline).
+export type OfflinePacket = Packet<string, "offline">;
+
+export type ChangeNicknamePacket = Packet<{
+  userId: string;
+  newNickname: string;
+}, "change_nickname">;
+
+
+
+export type MessagesSyncPacket = Packet<Message[], "messages_sync">;
+export type ParticipantsSyncPacket = Packet<Omit<Participant, "connections">[], "participants_sync">;
+export type ParticipantJoinedPacket = Packet<Omit<Participant, "connections">, "participant_joined">;
+
+
+
+
+export type MessagePacket = Packet<Message, "message">;
+
+export type MessageAcknowledgmentPacket = Packet<{
+  messageId: string;
+  sender: string;
+}, "message_acknowledgment">;
+
+export type ReactionPacket = Packet<Reaction, "reaction">;
+export type TypingPacket = Packet<boolean, "typing">;
+export type EditMessagePacket = Packet<
+  { message_id: string; new_content: string; user_id: string },
+  "edit_message"
+>;
+export type DisconnectPacket = Packet<null, "disconnect">;
+export type ChangeThemePacket = Packet<{
+  mode: "light" | "dark";
+  theme: ChatThemeV2
+}, "change_theme">;
