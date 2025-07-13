@@ -57,11 +57,12 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
     });
   }
 
-  await repo.setMusicInfo(ws.chatId, {
-    name: payload.name,
+  await repo.updateMusicInfo(ws.chatId, {
     url: payload.url,
+    name: payload.name,
     progress: 0,
-    state: "paused",
+    state: 'paused',
+    playTime: undefined,
   });
 
   broadcastToRoom(ws.chatId, {

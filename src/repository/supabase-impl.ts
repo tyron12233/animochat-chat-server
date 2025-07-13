@@ -455,12 +455,12 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.handleError(error, "getMusicInfo");
     return data?.music_info || null;
   }
-
+  
   async updateMusicInfo(chatId: string, musicInfo: Partial<MusicInfo>) {
-    const { error } = await this.supabase
-      .from("rooms")
-      .update({ music_info: musicInfo })
-      .eq("id", chatId);
+    const { error } = await this.supabase.rpc("update_music_info", {
+      room_id: chatId,
+      new_info: musicInfo,
+    });
     this.handleError(error, "updateMusicInfo");
   }
 }
