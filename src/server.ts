@@ -15,7 +15,10 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors())
+app.use(cors({
+  credentials: true,
+  origin: process.env.CORS_ORIGIN || "https://chat.tyronscott.me",
+}))
 app.use(express.json())
 
 const server = http.createServer(app);
