@@ -57,7 +57,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   }
 
   if (await isUserBanned(chatId, userId, ipAddress)) {
-    ws.close(1010, "You are banned from this room.");
+    ws.close(3010, "You are banned from this room.");
     throw new Error(`User ${userId} is banned from room ${chatId}.`);
   }
   const roomInfo = await repo.getRoomInfo(chatId);
@@ -67,7 +67,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   const onlineCount = userStore.getOnlineUsersInRoom(chatId).length;
   const maxParticipants = roomInfo.max_participants ?? 2;
   if (onlineCount >= maxParticipants && !isGhost) {
-    ws.close(1020, "Room is full.");
+    ws.close(3020, "Room is full.");
     throw new Error(`Room ${chatId} is full.`);
   }
 

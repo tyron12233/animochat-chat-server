@@ -169,7 +169,7 @@ export async function banUser(req: Request, res: Response) {
     userStore.getSocketsInRoom(chatId)?.forEach((socket) => {
         if (socket.userId === userId) {
           // Close the socket connection for the banned user
-          socket.close(1010, "You have been banned from this room.");
+          socket.close(3010, "You have been banned from this room.");
         }
     });
 
