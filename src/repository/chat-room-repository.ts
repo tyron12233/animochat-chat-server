@@ -21,6 +21,7 @@ export interface IChatRoomRepository {
   getMessageCount(chatId: string): Promise<number>;
 
   // --- Participant & Nickname Management ---
+  containsParticipant(chatId: string, userId: string): Promise<boolean>
   addParticipant(chatId: string, userId: string, initialNickname: string): Promise<any>;
   removeParticipant(chatId: string, userId: string): Promise<any>;
   getParticipantIds(chatId: string): Promise<string[]>;

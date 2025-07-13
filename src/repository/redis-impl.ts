@@ -197,6 +197,10 @@ export class RedisChatRoomRepository implements IChatRoomRepository {
   }
 
   // --- Participant & Nickname Management ---
+  async containsParticipant(chatId: string, userId: string): Promise<boolean> {
+    return (await this.redis.sismember(redisRoomKey(chatId, "participants"), userId)) === 1;
+  }
+
   async addParticipant(chatId: string, userId: string, initialNickname: string) {
     await this.redis.sadd(redisRoomKey(chatId, "participants"), userId);
     await this.redis.hset(redisRoomKey(chatId, "nicknames"), userId, initialNickname);

@@ -262,6 +262,17 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return data ? data.map((p) => p.user_id) : [];
   }
 
+  async containsParticipant(chatId: string, userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("participants")
+      .select("user_id")
+      .eq("room_id", chatId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    this.handleError(error, "containsParticipant");
+    return !!data;
+  }
+
   async getParticipantCount(chatId: string): Promise<number> {
     const { count, error } = await this.supabase
       .from("participants")

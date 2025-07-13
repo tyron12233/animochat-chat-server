@@ -71,8 +71,8 @@ export async function handleUserConnected(ws: ChatWebSocket) {
     throw new Error(`Room ${chatId} is full.`);
   }
 
-  const existingParticipants = await repo.getParticipantIds(chatId);
-  if (!existingParticipants.includes(userId)) {
+  const existingParticipant = await repo.containsParticipant(chatId, userId);
+  if (!existingParticipant) {
     await repo.addParticipant(chatId, userId, generateUserFriendlyName());
   }
   userStore.addUserToRoom(ws, userId, chatId);
