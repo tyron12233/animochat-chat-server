@@ -83,7 +83,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
     sender: "system",
   };
 
-  broadcastToRoom(chatId, message, ws);
+  broadcastToRoom(chatId, message);
 }
 
 export async function handleDisconnect(ws: ChatWebSocket) {
