@@ -18,6 +18,7 @@ const packetHandlers: Record<string, PacketHandler> = {
     'change_nickname': handleChangeNickname,
     'change_theme': roomHandler.handleChangeTheme,
     'disconnect': roomHandler.handleDisconnectPacket,
+    'typing': roomHandler.handleTypingPacket,
 };
 
 

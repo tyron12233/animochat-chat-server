@@ -24,6 +24,23 @@ async function isUserBanned(
   return false;
 }
 
+export async function handleTypingPacket(ws: ChatWebSocket, content: any) {
+  const { chatId, userId } = ws;
+
+  if (!chatId || !userId) {
+    console.error("WebSocket is not properly initialized with chatId or userId.");
+    return;
+  }
+
+  const packet = {
+    type: "typing",
+    content: content,
+    sender: userId,
+  };
+
+  broadcastToRoom(chatId, packet, ws);
+}
+
 export async function handleDisconnectPacket(ws: ChatWebSocket, content: any) {
   const { chatId, userId } = ws;
   const roomRepo = getChatRoomRepository();
