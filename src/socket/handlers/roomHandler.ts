@@ -28,7 +28,9 @@ export async function handleTypingPacket(ws: ChatWebSocket, content: any) {
   const { chatId, userId } = ws;
 
   if (!chatId || !userId) {
-    console.error("WebSocket is not properly initialized with chatId or userId.");
+    console.error(
+      "WebSocket is not properly initialized with chatId or userId."
+    );
     return;
   }
 
@@ -98,23 +100,25 @@ export async function handleUserConnected(ws: ChatWebSocket) {
 
   const existingMusicInfo = await repo.getMusicInfo(chatId);
   if (existingMusicInfo) {
-    broadcastToRoom(chatId, {
-      type: "music_set",
-      content: existingMusicInfo,
-      sender: "system",
-    })
+    ws.send(
+      JSON.stringify({
+        type: "music_set",
+        content: existingMusicInfo,
+        sender: "system",
+      })
+    );
   }
 
   if (isGhost) {
     return;
   }
 
-
-
   const nickname = (await repo.getNickname(chatId, userId)) || "Someone";
 
-  console.log(`User ${userId} connected to room ${chatId} from IP ${ipAddress}. With nickname ${nickname}`);
-  
+  console.log(
+    `User ${userId} connected to room ${chatId} from IP ${ipAddress}. With nickname ${nickname}`
+  );
+
   const message = {
     type: "participant_joined",
     content: { userId, nickname },
