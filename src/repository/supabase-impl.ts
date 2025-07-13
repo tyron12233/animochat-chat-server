@@ -178,16 +178,18 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
   }
 
   async addMessage(chatId: string, message: Message) {
+    const anyMessage: any = message;
+
     const { error } = await this.supabase.from("messages").insert({
       id: message.id,
       room_id: chatId,
+      mentions: anyMessage.mentions || [],
       user_id: message.sender,
       content: message.content,
       type: message.type,
       reactions: [],
     });
     this.handleError(error, "addMessage");
-    // Note: Trimming old messages would require a separate process (e.g., a cron job) in Supabase.
   }
 
   async getMessages(chatId: string, start: number, end: number): Promise<Message[]> {
@@ -213,6 +215,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       created_at: new Date(msg.created_at).toISOString(),
       session_id: msg.room_id,
       replyingTo: msg.replyingTo || undefined,
+      mentions: msg.mentions || [],
       type: msg.type,
       edited: msg.edited,
       reactions: msg.reactions as Reaction[] || [],
