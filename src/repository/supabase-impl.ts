@@ -209,11 +209,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     // Map Supabase columns to Message interface
     const messages: Message[] = data.map(msg => ({
       id: msg.id,
-      sender: msg.sender,
+      sender: msg.user_id,
       content: msg.content,
       created_at: new Date(msg.created_at).toISOString(),
       session_id: msg.room_id,
-      replyingTo: msg.replying_to || undefined,
+      replyingTo: msg.replyingTo || undefined,
       senderNickname: msg.sender_nickname || undefined,
       type: msg.type,
       edited: msg.edited,
