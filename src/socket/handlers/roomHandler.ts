@@ -24,11 +24,12 @@ async function isUserBanned(
   return false;
 }
 
- export async function handleDisconnectPacket(ws: ChatWebSocket, content: any) {
+export async function handleDisconnectPacket(ws: ChatWebSocket, content: any) {
   const { chatId, userId } = ws;
   const roomRepo = getChatRoomRepository();
   const roomInfo = await roomRepo.getRoomInfo(chatId);
-  const isGroupChat = roomInfo.max_participants && roomInfo.max_participants > 2;
+  const isGroupChat =
+    roomInfo.max_participants && roomInfo.max_participants > 2;
 
   if (!isGroupChat) {
     await roomRepo.markClosed(chatId);
@@ -42,19 +43,23 @@ async function isUserBanned(
     type: "disconnect",
     content: null,
     sender: userId,
-  }
+  };
   broadcastToRoom(chatId, packet, ws);
 }
 
 export async function handleUserConnected(ws: ChatWebSocket) {
   const { chatId, userId, ipAddress } = ws;
+  const repo = getChatRoomRepository();
+  // auto create room on 1-1 chats
+  const roomExists = await repo.roomExists(chatId);
+  if (!roomExists) {
+    await repo.createRoom(chatId, "1-1 Chat", 2);
+  }
 
   if (await isUserBanned(chatId, userId, ipAddress)) {
     ws.close(1010, "You are banned from this room.");
     throw new Error(`User ${userId} is banned from room ${chatId}.`);
   }
-
-  const repo = getChatRoomRepository();
   const roomInfo = await repo.getRoomInfo(chatId);
 
   const isGhost = await repo.isGhostMode(chatId, userId);
