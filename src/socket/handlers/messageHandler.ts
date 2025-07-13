@@ -148,7 +148,7 @@ export async function handleChangeNickname(
   );
 
   broadcastToRoom(chatId, {
-    type: "nickname_change",
+    type: "change_nickname",
     content: {
       userId,
       newNickname,
