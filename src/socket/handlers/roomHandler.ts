@@ -107,6 +107,21 @@ export async function handleUserConnected(ws: ChatWebSocket) {
         sender: "system",
       })
     );
+
+    if (existingMusicInfo?.state === 'playing') {
+      const currentTime = new Date().getTime()
+      const elapsedTime = currentTime - (existingMusicInfo.playTime || 0);
+
+      ws.send(
+        JSON.stringify({
+          type: "music_play",
+          content: {
+            currentTime: existingMusicInfo.progress + (elapsedTime / 1000),
+          },
+          sender: "system",
+        })
+      );
+    }
   }
 
   if (isGhost) {

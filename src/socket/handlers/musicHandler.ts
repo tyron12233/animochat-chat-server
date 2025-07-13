@@ -24,6 +24,24 @@ interface MusicSeekPayload {
   seekTime: number;
 }
 
+export async function handleMusicProgress(
+  ws: ChatWebSocket,
+  payload: { progress: number }
+) {
+  const repo = getChatRoomRepository();
+
+  const current = await repo.getMusicInfo(ws.chatId);
+
+  if (!current) return;
+
+  const msg = {
+    ...current,
+    progress: payload.progress,
+  };
+
+  repo.setMusicInfo(ws.chatId, msg);
+}
+
 export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
   // Handle the 'music_set' event
   console.log(`Setting music for chat ${ws.chatId}:`, payload);
@@ -33,9 +51,9 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
 
   if (existingMusicInfo) {
     broadcastToRoom(ws.chatId, {
-        type: "music_pause",
-        content: null,
-        sender: ws.userId,
+      type: "music_pause",
+      content: null,
+      sender: ws.userId,
     });
   }
 
@@ -43,6 +61,7 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
     name: payload.name,
     url: payload.url,
     progress: 0,
+    state: "paused",
   });
 
   broadcastToRoom(ws.chatId, {
@@ -52,7 +71,18 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
   });
 }
 
-export function handleMusicPlay(ws: ChatWebSocket, payload: MusicPlayPayload) {
+export async function handleMusicPlay(
+  ws: ChatWebSocket,
+  payload: MusicPlayPayload
+) {
+  const repo = getChatRoomRepository();
+
+  repo.updateMusicInfo(ws.chatId, {
+    state: "playing",
+    progress: payload.currentTime,
+    playTime: Date.now(),
+  });
+
   broadcastToRoom(ws.chatId, {
     type: "music_play",
     content: payload,
@@ -61,6 +91,11 @@ export function handleMusicPlay(ws: ChatWebSocket, payload: MusicPlayPayload) {
 }
 
 export function handleMusicPause(ws: ChatWebSocket, payload: any) {
+  const repo = getChatRoomRepository();
+  repo.updateMusicInfo(ws.chatId, {
+    state: "paused",
+  });
+
   broadcastToRoom(ws.chatId, {
     type: "music_pause",
     content: null,

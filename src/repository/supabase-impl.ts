@@ -1,5 +1,12 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import type { ChatRoomInfo, ChatThemeV2, Message, PublicRoomInfo, Reaction } from "../types";
+import type {
+  ChatRoomInfo,
+  ChatThemeV2,
+  Message,
+  MusicInfo,
+  PublicRoomInfo,
+  Reaction,
+} from "../types";
 import type { IChatRoomRepository } from "./chat-room-repository";
 
 export class SupabaseChatRoomRepository implements IChatRoomRepository {
@@ -42,7 +49,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       name: name,
       max_participants: maxParticipants,
       theme: null,
-      mode: 'light',
+      mode: "light",
       is_closed: false,
     });
     this.handleError(error, "createRoom");
@@ -50,7 +57,10 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
 
   async deleteRoom(chatId: string) {
     // With "ON DELETE CASCADE" in the schema, just deleting the room is enough.
-    const { error } = await this.supabase.from("rooms").delete().eq("id", chatId);
+    const { error } = await this.supabase
+      .from("rooms")
+      .delete()
+      .eq("id", chatId);
     this.handleError(error, "deleteRoom");
     console.log(`[${chatId}] DELETED room from Supabase.`);
   }
@@ -97,7 +107,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
   async getAllRoomIds(): Promise<string[]> {
     const { data, error } = await this.supabase.from("rooms").select("id");
     this.handleError(error, "getAllRoomIds");
-    return data?.map(r => r.id) || [];
+    return data?.map((r) => r.id) || [];
   }
 
   // --- Message Management ---
@@ -148,16 +158,19 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     //   RETURN FOUND;
     // END;
     // $$ LANGUAGE plpgsql;
-    const { data, error } = await this.supabase.rpc('update_message_reaction', {
+    const { data, error } = await this.supabase.rpc("update_message_reaction", {
       p_message_id: reaction.message_id,
       p_user_id: reaction.user_id,
-      p_emoji: reaction.emoji
+      p_emoji: reaction.emoji,
     });
-    this.handleError(error, 'updateReaction');
+    this.handleError(error, "updateReaction");
     return data || false;
   }
 
-  async markMessageAsDeleted(chatId: string, messageId: string): Promise<boolean> {
+  async markMessageAsDeleted(
+    chatId: string,
+    messageId: string
+  ): Promise<boolean> {
     const { error, count } = await this.supabase
       .from("messages")
       .update({ type: "deleted", content: null }) // Also clear content
@@ -167,7 +180,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return count !== null && count > 0;
   }
 
-  async editMessage(chatId: string, messageId: string, newContent: string): Promise<boolean> {
+  async editMessage(
+    chatId: string,
+    messageId: string,
+    newContent: string
+  ): Promise<boolean> {
     const { error, count } = await this.supabase
       .from("messages")
       .update({ content: newContent, edited: true })
@@ -192,7 +209,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.handleError(error, "addMessage");
   }
 
-  async getMessages(chatId: string, start: number, end: number): Promise<Message[]> {
+  async getMessages(
+    chatId: string,
+    start: number,
+    end: number
+  ): Promise<Message[]> {
     // Supabase range is inclusive, so adjust `end` if needed.
     // `end` in lrange is inclusive, so `end - start + 1` is the limit.
     const limit = end === -1 ? 1000 : end - start + 1; // Handle Redis's -1 convention
@@ -208,7 +229,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     if (!data) return [];
 
     // Map Supabase columns to Message interface
-    const messages: Message[] = data.map(msg => ({
+    const messages: Message[] = data.map((msg) => ({
       id: msg.id,
       sender: msg.user_id,
       content: msg.content,
@@ -218,7 +239,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       mentions: msg.mentions || [],
       type: msg.type,
       edited: msg.edited,
-      reactions: msg.reactions as Reaction[] || [],
+      reactions: (msg.reactions as Reaction[]) || [],
     }));
 
     return messages.reverse(); // To get chronological order
@@ -234,7 +255,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
   }
 
   // --- Participant & Nickname Management ---
-  async addParticipant(chatId: string, userId: string, initialNickname: string) {
+  async addParticipant(
+    chatId: string,
+    userId: string,
+    initialNickname: string
+  ) {
     const { error } = await this.supabase.from("participants").upsert({
       room_id: chatId,
       user_id: userId,
@@ -397,7 +422,9 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.handleError(error, "setTheme");
   }
 
-  async getTheme(chatId: string): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }> {
+  async getTheme(
+    chatId: string
+  ): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }> {
     const { data, error } = await this.supabase
       .from("rooms")
       .select("theme, mode")
@@ -410,17 +437,16 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     };
   }
 
-
   // music info, { url, name, progress }
-  async setMusicInfo(chatId: string, musicInfo: { url: string; name: string; progress: number }) {
+  async setMusicInfo(chatId: string, musicInfo: MusicInfo) {
     const { error } = await this.supabase
       .from("rooms")
       .update({ music_info: musicInfo })
       .eq("id", chatId);
     this.handleError(error, "setMusicInfo");
   }
-  
-  async getMusicInfo(chatId: string): Promise<{ url: string; name: string; progress: number } | null> {
+
+  async getMusicInfo(chatId: string): Promise<MusicInfo | null> {
     const { data, error } = await this.supabase
       .from("rooms")
       .select("music_info")
@@ -430,5 +456,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return data?.music_info || null;
   }
 
-
+  async updateMusicInfo(chatId: string, musicInfo: Partial<MusicInfo>) {
+    const { error } = await this.supabase
+      .from("rooms")
+      .update({ music_info: musicInfo })
+      .eq("id", chatId);
+    this.handleError(error, "updateMusicInfo");
+  }
 }

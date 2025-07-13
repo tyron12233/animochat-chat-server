@@ -2,6 +2,7 @@ import type {
   ChatRoomInfo,
   ChatThemeV2,
   Message,
+  MusicInfo,
   PublicRoomInfo,
   Reaction,
 } from "../types";
@@ -77,7 +78,13 @@ export interface IChatRoomRepository {
   // music
   getMusicInfo(
     chatId: string
-  ): Promise<{ url: string; name: string; progress: number } | null>;
+  ): Promise<MusicInfo | null>;
 
-  setMusicInfo(chatId: string, musicInfo: { url: string; name: string; progress: number }): Promise<void>;
+  setMusicInfo(chatId: string, musicInfo: MusicInfo): Promise<void>;
+
+  updateMusicInfo(
+    chatId: string,
+    musicInfo: Partial<MusicInfo>
+  ): Promise<void>;
+
 }

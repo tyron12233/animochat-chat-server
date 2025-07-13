@@ -33,7 +33,7 @@ interface BaseMessage {
   session_id: string;
   created_at: string; // ISO string
   edited?: boolean;
-  senderNickname?: string; 
+  senderNickname?: string;
 }
 
 export interface SystemMessage extends BaseMessage {
@@ -52,7 +52,13 @@ export interface UserMessage extends BaseMessage {
 
 export type Message = UserMessage | SystemMessage;
 
-
+export interface MusicInfo {
+  url: string;
+  name: string;
+  progress: number;
+  state: 'playing' | 'paused';
+  playTime?: number; 
+}
 
 export interface ColorScheme {
   light: string;
@@ -172,45 +178,46 @@ export interface ChatThemeV2 {
   };
 }
 
-
-
-
-
 // PACKETS
 
 export interface Packet<T, K extends String> {
   type: string;
   content: T;
   sender: string;
-};
-
-
+}
 
 export type BanPacket = Packet<string, "ban">;
 // This packet is used when the user is offline or not connected.
 // the content is a string (the user id of the user who when offline).
 export type OfflinePacket = Packet<string, "offline">;
 
-export type ChangeNicknamePacket = Packet<{
-  userId: string;
-  newNickname: string;
-}, "change_nickname">;
-
-
+export type ChangeNicknamePacket = Packet<
+  {
+    userId: string;
+    newNickname: string;
+  },
+  "change_nickname"
+>;
 
 export type MessagesSyncPacket = Packet<Message[], "messages_sync">;
-export type ParticipantsSyncPacket = Packet<Omit<Participant, "connections">[], "participants_sync">;
-export type ParticipantJoinedPacket = Packet<Omit<Participant, "connections">, "participant_joined">;
-
-
-
+export type ParticipantsSyncPacket = Packet<
+  Omit<Participant, "connections">[],
+  "participants_sync"
+>;
+export type ParticipantJoinedPacket = Packet<
+  Omit<Participant, "connections">,
+  "participant_joined"
+>;
 
 export type MessagePacket = Packet<Message, "message">;
 
-export type MessageAcknowledgmentPacket = Packet<{
-  messageId: string;
-  sender: string;
-}, "message_acknowledgment">;
+export type MessageAcknowledgmentPacket = Packet<
+  {
+    messageId: string;
+    sender: string;
+  },
+  "message_acknowledgment"
+>;
 
 export type ReactionPacket = Packet<Reaction, "reaction">;
 export type TypingPacket = Packet<boolean, "typing">;
@@ -219,7 +226,10 @@ export type EditMessagePacket = Packet<
   "edit_message"
 >;
 export type DisconnectPacket = Packet<null, "disconnect">;
-export type ChangeThemePacket = Packet<{
-  mode: "light" | "dark";
-  theme: ChatThemeV2
-}, "change_theme">;
+export type ChangeThemePacket = Packet<
+  {
+    mode: "light" | "dark";
+    theme: ChatThemeV2;
+  },
+  "change_theme"
+>;
