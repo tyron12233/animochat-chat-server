@@ -1,10 +1,20 @@
-import type { ChatRoomInfo, ChatThemeV2, Message, PublicRoomInfo, Reaction } from "../types";
+import type {
+  ChatRoomInfo,
+  ChatThemeV2,
+  Message,
+  PublicRoomInfo,
+  Reaction,
+} from "../types";
 
 export interface IChatRoomRepository {
   // --- Room Management ---
   markClosed(chatId: string): Promise<any>;
   isRoomClosed(chatId: string): Promise<boolean>;
-  createRoom(chatId: string, name: string, maxParticipants: number): Promise<any>;
+  createRoom(
+    chatId: string,
+    name: string,
+    maxParticipants: number
+  ): Promise<any>;
   deleteRoom(chatId: string): Promise<any>;
   roomExists(chatId: string): Promise<boolean>;
   listPublicRooms(): Promise<PublicRoomInfo[]>;
@@ -15,21 +25,33 @@ export interface IChatRoomRepository {
   // --- Message Management ---
   updateReaction(chatId: string, reaction: Reaction): Promise<boolean>;
   markMessageAsDeleted(chatId: string, messageId: string): Promise<boolean>;
-  editMessage(chatId: string, messageId: string, newContent: string): Promise<boolean>;
+  editMessage(
+    chatId: string,
+    messageId: string,
+    newContent: string
+  ): Promise<boolean>;
   addMessage(chatId: string, message: Message): Promise<any>;
   getMessages(chatId: string, start: number, end: number): Promise<Message[]>;
   getMessageCount(chatId: string): Promise<number>;
 
   // --- Participant & Nickname Management ---
-  containsParticipant(chatId: string, userId: string): Promise<boolean>
-  addParticipant(chatId: string, userId: string, initialNickname: string): Promise<any>;
+  containsParticipant(chatId: string, userId: string): Promise<boolean>;
+  addParticipant(
+    chatId: string,
+    userId: string,
+    initialNickname: string
+  ): Promise<any>;
   removeParticipant(chatId: string, userId: string): Promise<any>;
   getParticipantIds(chatId: string): Promise<string[]>;
   getParticipantCount(chatId: string): Promise<number>;
 
   getNicknames(chatId: string): Promise<Map<string, string>>;
   getNickname(chatId: string, userId: string): Promise<string | null>;
-  setNickname(chatId: string, userId: string, newNickname: string): Promise<any>;
+  setNickname(
+    chatId: string,
+    userId: string,
+    newNickname: string
+  ): Promise<any>;
 
   // --- Ghost Mode ---
   setGhostMode(chatId: string, userId: string, isGhost: boolean): Promise<any>;
@@ -43,6 +65,19 @@ export interface IChatRoomRepository {
   isIpBanned(chatId: string, ip: string): Promise<boolean>;
 
   // --- Theme Management ---
-  setTheme(chatId: string, theme: ChatThemeV2, mode: "light" | "dark"): Promise<any>;
-  getTheme(chatId: string): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }>;
+  setTheme(
+    chatId: string,
+    theme: ChatThemeV2,
+    mode: "light" | "dark"
+  ): Promise<any>;
+  getTheme(
+    chatId: string
+  ): Promise<{ theme: ChatThemeV2 | null; mode: "light" | "dark" }>;
+
+  // music
+  getMusicInfo(
+    chatId: string
+  ): Promise<{ url: string; name: string; progress: number } | null>;
+
+  setMusicInfo(chatId: string, musicInfo: { url: string; name: string; progress: number }): Promise<void>;
 }

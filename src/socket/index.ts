@@ -5,6 +5,7 @@ import * as roomHandler from './handlers/roomHandler';
 import type { ChatWebSocket } from "../chat-room";
 import { handleChangeNickname, handleDeleteMessage, handleEditMessage, handleReaction, handleSendMessage } from "./handlers/messageHandler";
 import { broadcastToRoom } from "./broadcast";
+import { handleMusicPause, handleMusicPlay, handleMusicSet } from "./handlers/musicHandler";
 
 // Define a type for our packet handlers
 type PacketHandler = (ws: ChatWebSocket, payload: any) => void;
@@ -19,6 +20,12 @@ const packetHandlers: Record<string, PacketHandler> = {
     'change_theme': roomHandler.handleChangeTheme,
     'disconnect': roomHandler.handleDisconnectPacket,
     'typing': roomHandler.handleTypingPacket,
+
+
+    // music related
+    'music_set': handleMusicSet,
+    'music_pause': handleMusicPause,
+    'music_play': handleMusicPlay
 };
 
 

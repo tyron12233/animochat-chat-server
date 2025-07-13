@@ -128,12 +128,17 @@ export async function handleChangeNickname(
 ) {
   const { chatId, userId } = ws;
   const roomRepo = getChatRoomRepository();
-  const { newNickname } = content;
+  let { newNickname } = content;
   const oldNickname = await roomRepo.getNickname(chatId, userId);
   if (newNickname === oldNickname) {
     // No change in nickname, just return
     return;
   }
+
+  if (newNickname.length > 20) {
+    newNickname = newNickname.slice(0, 20);
+  }
+
   await roomRepo.setNickname(chatId, userId, newNickname);
 
   const systemMessage: SystemMessage = {

@@ -94,6 +94,17 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   }
   userStore.addUserToRoom(ws, userId, chatId);
 
+  // music
+
+  const existingMusicInfo = await repo.getMusicInfo(chatId);
+  if (existingMusicInfo) {
+    broadcastToRoom(chatId, {
+      type: "music_set",
+      content: existingMusicInfo,
+      sender: "system",
+    })
+  }
+
   if (isGhost) {
     return;
   }

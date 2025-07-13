@@ -2,7 +2,6 @@ import { Redis } from "ioredis";
 import type { IChatRoomRepository } from "../repository/chat-room-repository";
 import { SupabaseChatRoomRepository } from "../repository/supabase-impl";
 import { createClient } from "@supabase/supabase-js";
-import { RedisChatRoomRepository } from "../repository/redis-impl";
 
 const REDIS_URL = process.env.REDIS_URL;
 if (!REDIS_URL) {
@@ -58,10 +57,7 @@ export function createChatRoomRepository(
   }
 
   if (backendType === 'redis') {
-    // Assumes your Redis client is configured elsewhere and passed in.
-    // For a standalone setup, you might initialize it here.
-    const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-    return new RedisChatRoomRepository(redisClient);
+    throw new Error("Redis is no longer supported as a backend for chat rooms. Please use Supabase instead.");
   }
 
   throw new Error(`Unsupported backend type: ${backendType}`);

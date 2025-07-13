@@ -303,6 +303,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       .eq("user_id", userId)
       .single();
     this.handleError(error, "getNickname");
+
+    if (data?.nickname && data.nickname.length > 20) {
+      data.nickname = data.nickname.slice(0, 20);
+    }
+
     return data?.nickname || null;
   }
 
@@ -404,4 +409,26 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       mode: (data?.mode as "light" | "dark") || "light",
     };
   }
+
+
+  // music info, { url, name, progress }
+  async setMusicInfo(chatId: string, musicInfo: { url: string; name: string; progress: number }) {
+    const { error } = await this.supabase
+      .from("rooms")
+      .update({ music_info: musicInfo })
+      .eq("id", chatId);
+    this.handleError(error, "setMusicInfo");
+  }
+  
+  async getMusicInfo(chatId: string): Promise<{ url: string; name: string; progress: number } | null> {
+    const { data, error } = await this.supabase
+      .from("rooms")
+      .select("music_info")
+      .eq("id", chatId)
+      .single();
+    this.handleError(error, "getMusicInfo");
+    return data?.music_info || null;
+  }
+
+
 }
