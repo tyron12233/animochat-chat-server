@@ -185,7 +185,6 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       content: message.content,
       type: message.type,
       reactions: [],
-      // Supabase automatically handles created_at
     });
     this.handleError(error, "addMessage");
     // Note: Trimming old messages would require a separate process (e.g., a cron job) in Supabase.
@@ -214,7 +213,6 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
       created_at: new Date(msg.created_at).toISOString(),
       session_id: msg.room_id,
       replyingTo: msg.replyingTo || undefined,
-      senderNickname: msg.sender_nickname || undefined,
       type: msg.type,
       edited: msg.edited,
       reactions: msg.reactions as Reaction[] || [],

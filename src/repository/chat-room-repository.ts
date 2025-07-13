@@ -25,6 +25,7 @@ export interface IChatRoomRepository {
   removeParticipant(chatId: string, userId: string): Promise<any>;
   getParticipantIds(chatId: string): Promise<string[]>;
   getParticipantCount(chatId: string): Promise<number>;
+
   getNicknames(chatId: string): Promise<Map<string, string>>;
   getNickname(chatId: string, userId: string): Promise<string | null>;
   setNickname(chatId: string, userId: string, newNickname: string): Promise<any>;
