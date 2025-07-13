@@ -81,7 +81,12 @@ export async function handleUserConnected(ws: ChatWebSocket) {
     return;
   }
 
+
+
   const nickname = (await repo.getNickname(chatId, userId)) || "Someone";
+
+  console.log(`User ${userId} connected to room ${chatId} from IP ${ipAddress}. With nickname ${nickname}`);
+  
   const message = {
     type: "participant_joined",
     content: { userId, nickname },

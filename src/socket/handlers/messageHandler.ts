@@ -60,11 +60,17 @@ export async function handleReaction(ws: ChatWebSocket, reaction: Reaction) {
 
   await roomRepo.updateReaction(chatId, reaction);
 
+  const anyReaction: any = reaction;
+  if (anyReaction.nickname === undefined || anyReaction.nickname === null) {
+    anyReaction.nickname =
+      (await roomRepo.getNickname(chatId, userId));
+  }
+
   broadcastToRoom(
     chatId,
     {
       type: "reaction",
-      content: reaction,
+      content: anyReaction,
       sender: userId,
     },
     ws
