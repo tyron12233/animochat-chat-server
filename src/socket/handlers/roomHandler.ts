@@ -28,7 +28,7 @@ async function isUserBanned(
   const { chatId, userId } = ws;
   const roomRepo = getChatRoomRepository();
   const roomInfo = await roomRepo.getRoomInfo(chatId);
-  const isGroupChat = parseInt(roomInfo.maxParticipants ?? "2", 10) > 2;
+  const isGroupChat = roomInfo.max_participants && roomInfo.max_participants > 2;
 
   if (!isGroupChat) {
     await roomRepo.markClosed(chatId);
@@ -60,7 +60,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   const isGhost = await repo.isGhostMode(chatId, userId);
 
   const onlineCount = userStore.getOnlineUsersInRoom(chatId).length;
-  const maxParticipants = parseInt(roomInfo.maxParticipants ?? "2", 10);
+  const maxParticipants = roomInfo.max_participants ?? 2;
   if (onlineCount >= maxParticipants && !isGhost) {
     ws.close(1020, "Room is full.");
     throw new Error(`Room ${chatId} is full.`);
@@ -90,7 +90,7 @@ export async function handleDisconnect(ws: ChatWebSocket) {
   const { chatId, userId, ipAddress } = ws;
   const repo = getChatRoomRepository();
   const info = await repo.getRoomInfo(chatId);
-  const maxParticipants = parseInt(info.maxParticipants ?? "2", 10);
+  const maxParticipants = info.max_participants ?? 2;
   const isGroupChat = maxParticipants > 2;
 
   userStore.removeUser(ws);
