@@ -47,10 +47,7 @@ export async function handleMusicFinished(ws: ChatWebSocket, payload: any) {
     // play the next song
     const nextSong = current.queue?.shift();
     if (nextSong) {
-        sendSystemMessage(
-            ws.chatId,
-            `Now playing: ${nextSong.name}`
-        )
+      sendSystemMessage(ws.chatId, `Now playing: ${nextSong.name}`);
 
       // Set the next song as the current song
       await repo.updateMusicInfo(ws.chatId, {
@@ -119,8 +116,11 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
   } else {
     // Add the song to the queue
     current.queue = current.queue || [];
-    current.queue.push(payload);
-    await repo.updateMusicInfo(ws.chatId, current);
+
+    if (current.queue.some((song) => song.url === payload.url)) {
+      // If the song is already in the queue, do not add it again
+      return;
+    }
 
     const nickname = (await repo.getNickname(ws.chatId, ws.userId)) || "Someone";
     sendSystemMessage(
@@ -128,12 +128,39 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
         `${nickname} added "${payload.name}" to the queue.`
     );
 
-    // queue updated
-    broadcastToRoom(ws.chatId, {
-      type: "music_queue_update",
-      content: current.queue,
-      sender: ws.userId,
-    });
+    // if is empty, set it as the current song
+    if (!current.currentSong) {
+      await repo.updateMusicInfo(ws.chatId, {
+        currentSong: payload,
+        progress: 0,
+        state: "paused",
+        playTime: undefined,
+        queue: [],
+      });
+
+      broadcastToRoom(ws.chatId, {
+        type: "music_set",
+        content: payload,
+        sender: ws.userId,
+      });
+    } else {
+        // Add the song to the queue
+        current.queue.push(payload);
+        await repo.updateMusicInfo(ws.chatId, current);
+    
+        const nickname = (await repo.getNickname(ws.chatId, ws.userId)) || "Someone";
+        sendSystemMessage(
+            ws.chatId,
+            `${nickname} added "${payload.name}" to the queue.`
+        );
+    
+        // queue updated
+        broadcastToRoom(ws.chatId, {
+            type: "music_queue_update",
+            content: current.queue,
+            sender: ws.userId,
+        });
+    }
   }
 }
 
