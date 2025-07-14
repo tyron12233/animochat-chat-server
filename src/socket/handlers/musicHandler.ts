@@ -102,7 +102,28 @@ export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
         },
         sender: ws.userId,
       });
+    } else {
+        // No more songs in the queue, just pause the music
+        await repo.updateMusicInfo(ws.chatId, {
+            currentSong: undefined,
+            progress: 0,
+            state: "paused",
+            playTime: undefined,
+            skipVotes: [],
+        });
+    
+        broadcastToRoom(ws.chatId, {
+            type: "music_set",
+            content: {},
+            sender: ws.userId,
+        });
     }
+  } else {
+    // Not enough votes, just update the skip votes
+    await repo.updateMusicInfo(ws.chatId, {
+      ...current,
+      skipVotes,
+    });
   }
 
   broadcastToRoom(ws.chatId, {
