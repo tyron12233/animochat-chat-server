@@ -228,12 +228,16 @@ export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
         progress: 0,
         state: "paused",
         playTime: undefined,
+        queue: [],
         skipVotes: [],
       });
 
       broadcastToRoom(ws.chatId, {
         type: "music_set",
-        content: {},
+        content: {
+            song: null,
+            queue: []
+        },
         sender: ws.userId,
       });
     }
