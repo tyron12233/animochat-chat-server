@@ -154,7 +154,7 @@ export async function handleDisconnect(ws: ChatWebSocket) {
 
   const stillOnline = userStore
     .getOnlineUsersInRoom(chatId)
-    .find((u) => u.id !== userId);
+    .find((u) => u.id === userId);
   if (!stillOnline) {
     const packet: OfflinePacket = {
       type: "offline",
