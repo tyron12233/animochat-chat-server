@@ -123,10 +123,7 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
     }
 
     const nickname = (await repo.getNickname(ws.chatId, ws.userId)) || "Someone";
-    sendSystemMessage(
-        ws.chatId,
-        `${nickname} added "${payload.name}" to the queue.`
-    );
+    
 
     // if is empty, set it as the current song
     if (!current.currentSong) {
@@ -138,6 +135,11 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
         queue: [],
       });
 
+      sendSystemMessage(
+        ws.chatId,
+        `${nickname} added "${payload.name}" as the current song.`
+      )
+
       broadcastToRoom(ws.chatId, {
         type: "music_set",
         content: payload,
@@ -148,7 +150,6 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
         current.queue.push(payload);
         await repo.updateMusicInfo(ws.chatId, current);
     
-        const nickname = (await repo.getNickname(ws.chatId, ws.userId)) || "Someone";
         sendSystemMessage(
             ws.chatId,
             `${nickname} added "${payload.name}" to the queue.`
