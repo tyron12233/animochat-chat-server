@@ -108,15 +108,15 @@ export async function handleUserConnected(ws: ChatWebSocket) {
       })
     );
 
-    if (existingMusicInfo?.state === 'playing') {
-      const currentTime = new Date().getTime()
+    if (existingMusicInfo?.state === "playing") {
+      const currentTime = new Date().getTime();
       const elapsedTime = currentTime - (existingMusicInfo.playTime || 0);
 
       ws.send(
         JSON.stringify({
           type: "music_play",
           content: {
-            currentTime: existingMusicInfo.progress + (elapsedTime / 1000),
+            currentTime: existingMusicInfo.progress + elapsedTime / 1000,
           },
           sender: "system",
         })
@@ -152,12 +152,17 @@ export async function handleDisconnect(ws: ChatWebSocket) {
 
   userStore.removeUser(ws);
 
-  const packet: OfflinePacket = {
-    type: "offline",
-    content: userId,
-    sender: "system",
-  };
-  broadcastToRoom(chatId, packet, ws);
+  const stillOnline = userStore
+    .getOnlineUsersInRoom(chatId)
+    .find((u) => u.id !== userId);
+  if (!stillOnline) {
+    const packet: OfflinePacket = {
+      type: "offline",
+      content: userId,
+      sender: "system",
+    };
+    broadcastToRoom(chatId, packet, ws);
+  }
 
   // if the room is empty, remove it
   const onlineUsers = userStore.getOnlineUsersInRoom(chatId);
