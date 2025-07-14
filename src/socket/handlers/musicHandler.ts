@@ -110,7 +110,10 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
 
     broadcastToRoom(ws.chatId, {
       type: "music_set",
-      content: payload,
+      content: {
+        song: payload,
+        queue: [],
+      },
       sender: ws.userId,
     });
   } else {
@@ -133,6 +136,8 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
         state: "paused",
         playTime: undefined,
         queue: [],
+        skipVotes: [],
+        finishedUsers: []
       });
 
       sendSystemMessage(
@@ -142,7 +147,10 @@ export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
 
       broadcastToRoom(ws.chatId, {
         type: "music_set",
-        content: payload,
+        content: {
+            song: payload,
+            queue: [],
+        },
         sender: ws.userId,
       });
     } else {
@@ -295,7 +303,9 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
 
   broadcastToRoom(ws.chatId, {
     type: "music_set",
-    content: payload,
+    content: {
+        song: payload
+    },
     sender: ws.userId,
   });
 }
