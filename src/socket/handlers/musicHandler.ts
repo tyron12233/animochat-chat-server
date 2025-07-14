@@ -76,6 +76,8 @@ export async function handleMusicFinished(ws: ChatWebSocket, payload: any) {
         currentSong: undefined,
         progress: 0,
         state: "paused",
+        queue: [],
+        skipVotes: [],
         playTime: undefined,
         finishedUsers: [],
       });
