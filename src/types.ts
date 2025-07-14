@@ -52,12 +52,18 @@ export interface UserMessage extends BaseMessage {
 
 export type Message = UserMessage | SystemMessage;
 
-export interface MusicInfo {
-  url: string;
+export type Song = {
   name: string;
+  url: string;
+}
+
+export interface MusicInfo {
+  currentSong?: Song;
   progress: number;
   state: 'playing' | 'paused';
   playTime?: number; 
+  queue?: Song[];
+  skipVotes?: { userId: string }[]
 }
 
 export interface ColorScheme {

@@ -102,7 +102,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   if (existingMusicInfo) {
     ws.send(
       JSON.stringify({
-        type: "music_set",
+        type: "music_sync",
         content: existingMusicInfo,
         sender: "system",
       })

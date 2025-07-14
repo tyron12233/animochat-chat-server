@@ -1,6 +1,8 @@
 import type { ChatWebSocket } from "../../chat-room";
 import { getChatRoomRepository } from "../../config/redis";
 import { broadcastToRoom } from "../broadcast";
+import * as userStore from "../../userStore";
+import type { Packet } from "../../types";
 
 /**
  * Represents the structure of a song object.
@@ -22,6 +24,90 @@ interface MusicPlayPayload {
  */
 interface MusicSeekPayload {
   seekTime: number;
+}
+
+export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
+  const repo = getChatRoomRepository();
+  const current = await repo.getMusicInfo(ws.chatId);
+
+  if (!current) {
+    // If no music info exists, create a new one
+    await repo.updateMusicInfo(ws.chatId, {
+      currentSong: payload,
+      progress: 0,
+      state: "paused",
+      playTime: undefined,
+      queue: [],
+    });
+
+    broadcastToRoom(ws.chatId, {
+      type: "music_set",
+      content: payload,
+      sender: ws.userId,
+    });
+  } else {
+    // Add the song to the queue
+    current.queue = current.queue || [];
+    current.queue.push(payload);
+    await repo.updateMusicInfo(ws.chatId, current);
+
+    // queue updated
+    broadcastToRoom(ws.chatId, {
+      type: "music_queue_update",
+      content: current.queue,
+      sender: ws.userId,
+    });
+  }
+}
+
+export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
+  const repo = getChatRoomRepository();
+
+  const current = await repo.getMusicInfo(ws.chatId);
+  if (!current) return;
+
+  const skipVotes = current.skipVotes || [];
+  const userId = ws.userId;
+  if (skipVotes.some((vote) => vote.userId === userId)) {
+    // User has already voted to skip
+    return;
+  }
+
+  // Add the user's vote to skip
+  skipVotes.push({ userId });
+
+  // if the number of votes exceeds half of the participants, skip the song
+  const onlineCount = userStore.getOnlineUsersInRoom(ws.chatId).length;
+  const requiredVotes = Math.ceil(onlineCount / 2);
+  const hasEnoughVotes = skipVotes.length >= requiredVotes;
+
+  if (hasEnoughVotes) {
+    const nextSong = current.queue?.shift();
+    if (nextSong) {
+      // Set the next song as the current song
+      await repo.updateMusicInfo(ws.chatId, {
+        currentSong: nextSong,
+        progress: 0,
+        state: "playing",
+        playTime: Date.now(),
+        skipVotes: [],
+      });
+
+      broadcastToRoom(ws.chatId, {
+        type: "music_set",
+        content: nextSong,
+        sender: ws.userId,
+      });
+    }
+  }
+
+  broadcastToRoom(ws.chatId, {
+    type: "music_skip_result",
+    content: {
+      skipVotes: skipVotes,
+      skipThreshold: requiredVotes,
+    },
+  } as Packet<any, any>);
 }
 
 export async function handleMusicProgress(
@@ -58,10 +144,9 @@ export async function handleMusicSet(ws: ChatWebSocket, payload: Song) {
   }
 
   await repo.updateMusicInfo(ws.chatId, {
-    url: payload.url,
-    name: payload.name,
+    currentSong: payload,
     progress: 0,
-    state: 'paused',
+    state: "paused",
     playTime: undefined,
   });
 
