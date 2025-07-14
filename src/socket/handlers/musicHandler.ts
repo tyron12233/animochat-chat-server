@@ -87,6 +87,7 @@ export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
       // Set the next song as the current song
       await repo.updateMusicInfo(ws.chatId, {
         currentSong: nextSong,
+        queue: current.queue,
         progress: 0,
         state: "playing",
         playTime: Date.now(),
@@ -95,7 +96,10 @@ export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
 
       broadcastToRoom(ws.chatId, {
         type: "music_set",
-        content: nextSong,
+        content: {
+            song: nextSong,
+            queue: current.queue,
+        },
         sender: ws.userId,
       });
     }
