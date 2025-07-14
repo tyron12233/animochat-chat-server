@@ -73,14 +73,14 @@ export async function handleMusicFinished(ws: ChatWebSocket, payload: any) {
     } else {
       // No more songs in the queue, just pause the music
       await repo.updateMusicInfo(ws.chatId, {
-        currentSong: undefined,
+        currentSong: null,
         progress: 0,
         state: "paused",
         queue: [],
         skipVotes: [],
         playTime: undefined,
         finishedUsers: [],
-      });
+      } as any);
 
       broadcastToRoom(ws.chatId, {
         type: "music_set",
