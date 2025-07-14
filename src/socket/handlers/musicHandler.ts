@@ -26,6 +26,70 @@ interface MusicSeekPayload {
   seekTime: number;
 }
 
+export async function handleMusicFinished(ws: ChatWebSocket, payload: any) {
+    const repo = getChatRoomRepository();
+
+    const current = await repo.getMusicInfo(ws.chatId);
+    if (!current) return;   
+
+    // if most of the participants are finished, we will play the next song
+    const onlineUsers = userStore.getOnlineUsersInRoom(ws.chatId);
+    const finishedUsers = current.finishedUsers || [];
+
+    const finishedSet = new Set(finishedUsers);
+    finishedSet.add(ws.userId);
+
+    const finishedCount = finishedSet.size;
+    const requiredCount = Math.ceil(onlineUsers.length / 2);
+    const hasEnoughFinished = finishedCount >= requiredCount;
+
+    if (hasEnoughFinished) {
+        // play the next song
+        const nextSong = current.queue?.shift();
+        if (nextSong) {
+            // Set the next song as the current song
+            await repo.updateMusicInfo(ws.chatId, {
+                currentSong: nextSong,
+                queue: current.queue,
+                progress: 0,
+                state: "playing",
+                playTime: Date.now(),
+                finishedUsers: [],
+            });
+
+            broadcastToRoom(ws.chatId, {
+                type: "music_set",
+                content: {
+                    song: nextSong,
+                    queue: current.queue,
+                },
+                sender: ws.userId,
+            });
+        } else {
+            // No more songs in the queue, just pause the music
+            await repo.updateMusicInfo(ws.chatId, {
+                currentSong: undefined,
+                progress: 0,
+                state: "paused",
+                playTime: undefined,
+                finishedUsers: [],
+            });
+
+            broadcastToRoom(ws.chatId, {
+                type: "music_set",
+                content: {},
+                sender: ws.userId,
+            });
+        }
+    } else {
+        // Not enough finished users, just update the finished users
+        await repo.updateMusicInfo(ws.chatId, {
+            ...current,
+            finishedUsers: Array.from(finishedSet),
+        });
+    }
+}
+
 export async function handleAddSongRequest(ws: ChatWebSocket, payload: Song) {
   const repo = getChatRoomRepository();
   const current = await repo.getMusicInfo(ws.chatId);
@@ -92,6 +156,7 @@ export async function handleMusicSkipRequest(ws: ChatWebSocket, payload: any) {
         state: "playing",
         playTime: Date.now(),
         skipVotes: [],
+        finishedUsers: [],
       });
 
       broadcastToRoom(ws.chatId, {

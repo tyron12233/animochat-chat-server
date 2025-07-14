@@ -64,6 +64,7 @@ export interface MusicInfo {
   playTime?: number; 
   queue?: Song[];
   skipVotes?: { userId: string }[]
+  finishedUsers?: string[];
 }
 
 export interface ColorScheme {
