@@ -16,6 +16,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.supabase = supabaseClient;
   }
 
+
   private handleError(error: PostgrestError | null, context: string) {
     if (error) {
       console.error(`Supabase error in ${context}:`, error);
@@ -414,12 +415,15 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return !!data;
   }
 
+
   async banIp(chatId: string, ip: string) {
     const { error } = await this.supabase
       .from("bans")
       .insert({ room_id: chatId, banned_ip_address: ip });
     this.handleError(error, "banIp");
   }
+
+  
 
   async isIpBanned(chatId: string, ip: string): Promise<boolean> {
     const { data, error } = await this.supabase

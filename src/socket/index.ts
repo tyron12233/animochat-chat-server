@@ -33,8 +33,6 @@ const packetHandlers: Record<string, PacketHandler> = {
     'music_finished': handleMusicFinished,
 };
 
-
-
 export async function onConnection(ws: ChatWebSocket, chatId: string) {
     try {
         await roomHandler.handleUserConnected(ws);
@@ -48,13 +46,6 @@ export async function onConnection(ws: ChatWebSocket, chatId: string) {
         try {
             const message: Packet<any, any> = JSON.parse(data.toString());
             const handler = packetHandlers[message.type];
-
-            const repo = getChatRoomRepository();
-            const isShadowBanned = await repo.isUserShadowBanned(ws.chatId, ws.userId);
-            if (isShadowBanned) {
-                // ignore messages
-                return;
-            } 
 
             if (handler) {
                 handler(ws, message.content);

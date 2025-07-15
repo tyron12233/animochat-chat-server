@@ -160,17 +160,17 @@ export async function shadowBanUser(req: Request, res: Response) {
     return;
   }
 
-  if (await roomRepo.isUserShadowBanned(chatId, userId)) {
-    res.status(400).json({ error: "User is already shadow banned" });
-    return;
-  }
+  // if (await roomRepo.isUserShadowBanned(chatId, userId)) {
+  //   res.status(400).json({ error: "User is already shadow banned" });
+  //   return;
+  // }
 
 
-  await roomRepo.shadowBanUser(chatId, userId);
+  // await roomRepo.shadowBanUser(chatId, userId);
 
-  res.status(200).json({
-    message: `User ${userId} has been shadow banned in room ${chatId}.`,
-  });
+  // res.status(200).json({
+  //   message: `User ${userId} has been shadow banned in room ${chatId}.`,
+  // });
 }
 
 export async function banUser(req: Request, res: Response) {
