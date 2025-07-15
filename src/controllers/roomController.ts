@@ -204,7 +204,7 @@ export async function banUser(req: Request, res: Response) {
     await roomRepo.banUser(chatId, userId);
 
     await roomRepo.deleteAllMessagesBy(chatId, userId);
-
+`1`
     const users = userStore
       .getSocketsInRoom(chatId)
       .filter((it) => it.userId === userId);

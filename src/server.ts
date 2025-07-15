@@ -7,6 +7,7 @@ import { onConnection } from "./socket";
 import type { ChatWebSocket } from "./chat-room";
 import router from "./routes/routes";
 import addStatusEndPoint, { startServiceRegistration } from "./service";
+import checkIpBan from "./middleware/checkIpBan";
 
 dotenv.config();
 
@@ -26,8 +27,12 @@ app.use(express.json());
 
 await initialize();
 
+app.use(checkIpBan);
+
+
+
 // Define the WebSocket route
-app.ws("/", (ws, req) => {
+app.ws("/", checkIpBan, (ws, req) => {
   // express-ws provides query params directly on the request object
   const { chatId, userId } = req.query;
 
