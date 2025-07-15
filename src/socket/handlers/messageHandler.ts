@@ -9,7 +9,19 @@ import type {
 } from "../../types";
 import { broadcastToRoom } from "../broadcast";
 
+const nonText = ['image', 'voice_message']
+const textMessages = ['user', 'text']
+
+function isTextMessage(type: string) {
+  return textMessages.includes(type) && !nonText.includes(type);
+}
+
 export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
+
+  if (isTextMessage(message.type ?? "text")) {
+    message.content = message?.content?.slice(0, 700);
+  } 
+
   const { chatId, userId } = ws;
 
   if (!chatId || !userId) {

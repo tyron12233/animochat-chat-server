@@ -8,6 +8,16 @@ import type { ChatWebSocket } from "./chat-room";
 import router from "./routes/routes";
 import addStatusEndPoint, { startServiceRegistration } from "./service";
 import checkIpBan from "./middleware/checkIpBan";
+import { MemoryStore, rateLimit } from 'express-rate-limit'
+
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
+	standardHeaders: 'draft-8', // draft-6: `RateLimit-*` headers; draft-7 & draft-8: combined `RateLimit` header
+	legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+  store: new MemoryStore()
+})
+
 
 dotenv.config();
 
@@ -28,6 +38,7 @@ app.use(express.json());
 await initialize();
 
 app.use(checkIpBan);
+app.use(limiter); 
 
 
 
@@ -35,9 +46,6 @@ app.use(checkIpBan);
 app.ws("/", checkIpBan, (ws, req) => {
   // express-ws provides query params directly on the request object
   const { chatId, userId } = req.query;
-
-  // 'trust proxy' allows Express to correctly get the IP from x-forwarded-for
-  const ip = req.ip;
 
   // Validate required parameters
   if (!chatId || !userId) {
