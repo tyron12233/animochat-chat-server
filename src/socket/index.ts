@@ -48,6 +48,11 @@ const packetHandlers: Record<string, PacketHandler> = {
 };
 
 export async function onConnection(ws: ChatWebSocket, req: Request) {
+    if(!ws.ipAddress) {
+        // If the WebSocket does not have an IP address, we cannot proceed
+        console.error("WebSocket connection without IP address.", ws.chatId, ws.userId); 
+        return;
+    }
   try {
     await roomHandler.handleUserConnected(ws);
   } catch (error) {
