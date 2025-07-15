@@ -6,6 +6,7 @@ import type { ChatWebSocket } from "../chat-room";
 import { handleChangeNickname, handleDeleteMessage, handleEditMessage, handleReaction, handleSendMessage } from "./handlers/messageHandler";
 import { broadcastToRoom } from "./broadcast";
 import { handleAddSongRequest, handleMusicFinished, handleMusicPause, handleMusicPlay, handleMusicProgress, handleMusicSet, handleMusicSkipRequest } from "./handlers/musicHandler";
+import { getChatRoomRepository } from "../config/redis";
 
 // Define a type for our packet handlers
 type PacketHandler = (ws: ChatWebSocket, payload: any) => void;
@@ -43,10 +44,17 @@ export async function onConnection(ws: ChatWebSocket, chatId: string) {
     }
 
 
-    ws.on('message', (data: Buffer) => {
+    ws.on('message', async (data: Buffer) => {
         try {
             const message: Packet<any, any> = JSON.parse(data.toString());
             const handler = packetHandlers[message.type];
+
+            const repo = getChatRoomRepository();
+            const isShadowBanned = await repo.isUserShadowBanned(ws.chatId, ws.userId);
+            if (isShadowBanned) {
+                // ignore messages
+                return;
+            } 
 
             if (handler) {
                 handler(ws, message.content);

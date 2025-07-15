@@ -62,6 +62,8 @@ export interface IChatRoomRepository {
   getAllGhosts(chatId: string): Promise<string[]>;
 
   // --- Ban Management ---
+  isUserShadowBanned(chatId: string, userId: string): Promise<boolean>;
+  shadowBanUser(chatId: string, userId: string): Promise<any>;
   banUser(chatId: string, userId: string): Promise<any>;
   isUserBanned(chatId: string, userId: string): Promise<boolean>;
   banIp(chatId: string, ip: string): Promise<any>;

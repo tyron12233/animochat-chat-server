@@ -2,7 +2,12 @@ import type { Request, Response } from "express";
 import { getChatRoomRepository } from "../config/redis";
 
 import * as userStore from "../userStore";
-import type { Message, MessagePacket, MessagesSyncPacket, SystemMessage } from "../types";
+import type {
+  Message,
+  MessagePacket,
+  MessagesSyncPacket,
+  SystemMessage,
+} from "../types";
 import { broadcastToRoom } from "../socket/broadcast";
 
 /**
@@ -136,9 +141,41 @@ export async function syncChatRoom(req: Request, res: Response) {
   });
 }
 
+export async function shadowBanUser(req: Request, res: Response) {
+  const roomRepo = getChatRoomRepository();
+
+  if ((req as any).user.role !== "admin") {
+    res.status(403).json({ error: "Only admins can ban users" });
+    return;
+  }
+
+  const { chatId, userId } = req.params;
+  if (!chatId || !userId) {
+    res.status(400).json({ error: "Chat ID and User ID are required" });
+    return;
+  }
+
+  if (!(await roomRepo.roomExists(chatId))) {
+    res.status(404).json({ error: "Chat room not found" });
+    return;
+  }
+
+  if (await roomRepo.isUserShadowBanned(chatId, userId)) {
+    res.status(400).json({ error: "User is already shadow banned" });
+    return;
+  }
+
+
+  await roomRepo.shadowBanUser(chatId, userId);
+
+  res.status(200).json({
+    message: `User ${userId} has been shadow banned in room ${chatId}.`,
+  });
+}
+
 export async function banUser(req: Request, res: Response) {
   const roomRepo = getChatRoomRepository();
-  
+
   if ((req as any).user.role !== "admin") {
     res.status(403).json({ error: "Only admins can ban users" });
     return;
@@ -166,25 +203,24 @@ export async function banUser(req: Request, res: Response) {
 
     await roomRepo.banUser(chatId, userId);
 
-    await roomRepo.deleteAllMessagesBy(
-      chatId,
-      userId
-    )
+    await roomRepo.deleteAllMessagesBy(chatId, userId);
 
+    const users = userStore
+      .getSocketsInRoom(chatId)
+      .filter((it) => it.userId === userId);
 
-    const users = userStore.getSocketsInRoom(chatId).filter(it => it.userId === userId);
-
-    const ips = users.map(u => u.ipAddress).filter(it => it !== null && it !== undefined);
+    const ips = users
+      .map((u) => u.ipAddress)
+      .filter((it) => it !== null && it !== undefined);
     for (let ip of ips) {
       await roomRepo.banIp(chatId, ip);
     }
-    
 
     users?.forEach((socket) => {
-        if (socket.userId === userId) {
-          // Close the socket connection for the banned user
-          socket.close(3010, "You have been banned from this room.");
-        }
+      if (socket.userId === userId) {
+        // Close the socket connection for the banned user
+        socket.close(3010, "You have been banned from this room.");
+      }
     });
 
     // Notify others
@@ -199,14 +235,11 @@ export async function banUser(req: Request, res: Response) {
       type: "system",
     };
     await roomRepo.addMessage(chatId, message);
-    broadcastToRoom(
-      chatId,
-      {
-        type: "message",
-        content: message,
-        sender: "system",
-      } as MessagePacket,
-    );
+    broadcastToRoom(chatId, {
+      type: "message",
+      content: message,
+      sender: "system",
+    } as MessagePacket);
 
     res.status(200).json({ message: `User ${nickname} has been banned.` });
   } catch (error) {

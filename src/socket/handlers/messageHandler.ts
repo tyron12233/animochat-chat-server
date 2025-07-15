@@ -49,7 +49,7 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
   broadcastToRoom(
     chatId,
     packet,
-    ws // Broadcast to all participants in the room except the sender
+    ws 
   );
 }
 
