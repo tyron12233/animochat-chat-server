@@ -22,6 +22,7 @@ import {
 } from "./handlers/musicHandler";
 import { getChatRoomRepository } from "../config/redis";
 import type { Request } from "express";
+import { RateLimiterMemory } from "rate-limiter-flexible";
 
 // Define a type for our packet handlers
 type PacketHandler = (ws: ChatWebSocket, payload: any) => void;
@@ -47,12 +48,21 @@ const packetHandlers: Record<string, PacketHandler> = {
   music_finished: handleMusicFinished,
 };
 
+const rateLimiter = new RateLimiterMemory({
+  points: 5, 
+  duration: 1, // per second
+});
+
 export async function onConnection(ws: ChatWebSocket, req: Request) {
-    if(!ws.ipAddress) {
-        // If the WebSocket does not have an IP address, we cannot proceed
-        console.error("WebSocket connection without IP address.", ws.chatId, ws.userId); 
-        return;
-    }
+  if (!ws.ipAddress) {
+    // If the WebSocket does not have an IP address, we cannot proceed
+    console.error(
+      "WebSocket connection without IP address.",
+      ws.chatId,
+      ws.userId
+    );
+    return;
+  }
   try {
     await roomHandler.handleUserConnected(ws);
   } catch (error) {
@@ -71,7 +81,14 @@ export async function onConnection(ws: ChatWebSocket, req: Request) {
   }
 
   ws.on("message", async (data: Buffer) => {
+    if (!ws.ipAddress) {
+        ws.close();
+        return
+    }
     try {
+        await rateLimiter.consume(ws.ipAddress);
+
+
       const message: Packet<any, any> = JSON.parse(data.toString());
       const handler = packetHandlers[message.type];
 

@@ -11,6 +11,7 @@
         "express-rate-limit": "^7.5.1",
         "express-ws": "^5.0.2",
         "ioredis": "^5.6.1",
+        "rate-limiter-flexible": "^7.1.1",
         "ws": "^8.18.2",
       },
       "devDependencies": {
@@ -303,6 +304,8 @@
     "qs": ["qs@6.14.0", "", { "dependencies": { "side-channel": "^1.1.0" } }, "sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w=="],
 
     "range-parser": ["range-parser@1.2.1", "", {}, "sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg=="],
+
+    "rate-limiter-flexible": ["rate-limiter-flexible@7.1.1", "", {}, "sha512-lsYRcqRSJrKBNt6pMzBJTiCJP5KnwsGWdObMZxd19JFUJRntM+yuHs4/2bs6NZweSLgpsDcykvzyQaumoslWQg=="],
 
     "raw-body": ["raw-body@3.0.0", "", { "dependencies": { "bytes": "3.1.2", "http-errors": "2.0.0", "iconv-lite": "0.6.3", "unpipe": "1.0.0" } }, "sha512-RmkhL8CAyCRPXCE28MMH0z2PNWQBNk2Q09ZdxM9IOOXwxwZbN+qbWaatPkdkWIKL2ZVDImrN/pK5HTRz2PcS4g=="],
 
