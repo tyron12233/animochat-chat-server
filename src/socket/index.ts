@@ -94,7 +94,7 @@ export async function onConnection(ws: ChatWebSocket, req: Request) {
 
       const isBanned = await getChatRoomRepository().isIpBanned(
         ws.chatId,
-        ws.userId
+        ws.ipAddress
       );
       if (isBanned) {
         ws.send(JSON.stringify({ error: "You are banned from this chat." }));
