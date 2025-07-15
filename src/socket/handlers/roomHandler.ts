@@ -68,6 +68,9 @@ export async function handleDisconnectPacket(ws: ChatWebSocket, content: any) {
 
 export async function handleUserConnected(ws: ChatWebSocket) {
   const { chatId, userId, ipAddress } = ws;
+  if (!ipAddress) {
+    return;
+  }
   const repo = getChatRoomRepository();
   // auto create room on 1-1 chats
   const roomExists = await repo.roomExists(chatId);
