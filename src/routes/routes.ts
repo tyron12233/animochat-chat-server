@@ -12,5 +12,4 @@ router.post("/ghost-mode", authMiddleware, ghostMode)
 router.post("/delete-room", authMiddleware, deleteRoom)
 router.post( "/ban/:chatId/:userId", authMiddleware, banUser)
 
-
 export default router;

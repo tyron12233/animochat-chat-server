@@ -167,6 +167,25 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return data || false;
   }
 
+  async deleteMessage(chatId: string, messageId: string): Promise<boolean> {
+    const { error, count } = await this.supabase
+      .from("messages")
+      .delete()
+      .eq("id", messageId)
+      .eq("room_id", chatId);
+    this.handleError(error, "deleteMessage");
+    return count !== null && count > 0;
+  }
+
+  async deleteAllMessagesBy(chatId: string, sender: string): Promise<void> {
+    const { error } = await this.supabase
+    .from("messages")
+    .delete()
+    .eq("room_id", chatId)
+    .eq("sender", sender);
+    this.handleError(error, "deleteAllMessagesBy")
+  }
+
   async markMessageAsDeleted(
     chatId: string,
     messageId: string

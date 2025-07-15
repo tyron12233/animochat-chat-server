@@ -14,6 +14,7 @@ import addStatusEndPoint, { startServiceRegistration } from "./service";
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true)
 
 app.use(cors({
   credentials: true,
@@ -33,6 +34,7 @@ server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url!, `http://${request.headers.host}`);
   const chatId = url.searchParams.get("chatId");
   const userId = url.searchParams.get("userId");
+  const ip = request.socket.remoteAddress || request.headers['x-forwarded-for'] as string;
 
   if (!chatId || !userId) {
     socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -45,6 +47,7 @@ server.on("upgrade", (request, socket, head) => {
     const cws: ChatWebSocket = ws as ChatWebSocket;
     cws.chatId = chatId;
     cws.userId = userId;
+    cws.ipAddress = ip;
     wss.emit("connection", cws, request);
   });
 });

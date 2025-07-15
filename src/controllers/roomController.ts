@@ -166,7 +166,21 @@ export async function banUser(req: Request, res: Response) {
 
     await roomRepo.banUser(chatId, userId);
 
-    userStore.getSocketsInRoom(chatId)?.forEach((socket) => {
+    await roomRepo.deleteAllMessagesBy(
+      chatId,
+      userId
+    )
+
+
+    const users = userStore.getSocketsInRoom(chatId).filter(it => it.userId === userId);
+
+    const ips = users.map(u => u.ipAddress).filter(it => it !== null && it !== undefined);
+    for (let ip of ips) {
+      await roomRepo.banIp(chatId, ip);
+    }
+    
+
+    users?.forEach((socket) => {
         if (socket.userId === userId) {
           // Close the socket connection for the banned user
           socket.close(3010, "You have been banned from this room.");

@@ -26,6 +26,8 @@ export interface IChatRoomRepository {
   // --- Message Management ---
   updateReaction(chatId: string, reaction: Reaction): Promise<boolean>;
   markMessageAsDeleted(chatId: string, messageId: string): Promise<boolean>;
+  deleteAllMessagesBy(chatId: string, sender: string): Promise<void>;
+    deleteMessage(chatId: string, messageId: string): Promise<boolean>;
   editMessage(
     chatId: string,
     messageId: string,
