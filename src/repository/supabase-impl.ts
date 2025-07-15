@@ -424,7 +424,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
   async isIpBanned(chatId: string, ip: string): Promise<boolean> {
     const { data, error } = await this.supabase
       .from("banned_ips")
-      .select("id")
+      .select("*")
       .eq("ip_address", ip)
       .maybeSingle();
     this.handleError(error, "isIpBanned");
