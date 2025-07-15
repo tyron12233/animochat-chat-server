@@ -3,6 +3,7 @@ import {type Express } from "express";
 import type { ChatWebSocket } from "./chat-room";
 import { getChatRoomRepository } from "./config/redis";
 import * as userStore from "./userStore";
+import type { Application } from "express-ws";
 
 
 export const CHAT_SERVER_PORT = process.env.PORT
@@ -92,7 +93,7 @@ export async function startServiceRegistration() {
  
 
 export default function addStatusEndPoint(
-  app: Express,
+  app: Application,
 ) {
   const roomRepo = getChatRoomRepository();
 

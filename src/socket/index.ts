@@ -7,6 +7,7 @@ import { handleChangeNickname, handleDeleteMessage, handleEditMessage, handleRea
 import { broadcastToRoom } from "./broadcast";
 import { handleAddSongRequest, handleMusicFinished, handleMusicPause, handleMusicPlay, handleMusicProgress, handleMusicSet, handleMusicSkipRequest } from "./handlers/musicHandler";
 import { getChatRoomRepository } from "../config/redis";
+import type { Request } from "express";
 
 // Define a type for our packet handlers
 type PacketHandler = (ws: ChatWebSocket, payload: any) => void;
@@ -33,7 +34,7 @@ const packetHandlers: Record<string, PacketHandler> = {
     'music_finished': handleMusicFinished,
 };
 
-export async function onConnection(ws: ChatWebSocket, chatId: string) {
+export async function onConnection(ws: ChatWebSocket, req: Request) {
     try {
         await roomHandler.handleUserConnected(ws);
     } catch (error) {
