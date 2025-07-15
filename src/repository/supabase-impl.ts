@@ -16,7 +16,6 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.supabase = supabaseClient;
   }
 
-
   private handleError(error: PostgrestError | null, context: string) {
     if (error) {
       console.error(`Supabase error in ${context}:`, error);
@@ -180,11 +179,11 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
 
   async deleteAllMessagesBy(chatId: string, sender: string): Promise<void> {
     const { error } = await this.supabase
-    .from("messages")
-    .delete()
-    .eq("room_id", chatId)
-    .eq("sender", sender);
-    this.handleError(error, "deleteAllMessagesBy")
+      .from("messages")
+      .delete()
+      .eq("room_id", chatId)
+      .eq("sender", sender);
+    this.handleError(error, "deleteAllMessagesBy");
   }
 
   async markMessageAsDeleted(
@@ -415,22 +414,18 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     return !!data;
   }
 
-
   async banIp(chatId: string, ip: string) {
     const { error } = await this.supabase
-      .from("bans")
-      .insert({ room_id: chatId, banned_ip_address: ip });
+      .from("banned_ips")
+      .insert({ ip_address: ip });
     this.handleError(error, "banIp");
   }
 
-  
-
   async isIpBanned(chatId: string, ip: string): Promise<boolean> {
     const { data, error } = await this.supabase
-      .from("bans")
+      .from("banned_ips")
       .select("id")
-      .eq("room_id", chatId)
-      .eq("banned_ip_address", ip)
+      .eq("ip_address", ip)
       .maybeSingle();
     this.handleError(error, "isIpBanned");
     return !!data;
@@ -478,7 +473,7 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.handleError(error, "getMusicInfo");
     return data?.music_info || null;
   }
-  
+
   async updateMusicInfo(chatId: string, musicInfo: Partial<MusicInfo>) {
     const { error } = await this.supabase.rpc("update_music_info", {
       room_id: chatId,
