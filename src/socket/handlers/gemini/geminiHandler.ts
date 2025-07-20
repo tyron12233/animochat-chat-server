@@ -65,8 +65,8 @@ export async function onAiMentioned(chatId: string, message: Message) {
   const replyingTo = await getReplyingToOfMessage(message);
 
   let content = message.content;
-  if (replyingTo) {
-    content = `In response to: "${replyingTo.content}"\n\n${content}`;
+  if (replyingTo && replyingTo.content) {
+    content = `In response to: "${JSON.stringify(replyingTo)}"\n\n actual user message: ${JSON.stringify(message)}`;
   }
 
   const response = await session.sendMessage({

@@ -12,9 +12,10 @@ export default async function checkIpBan(
   const ip = req.ip;
 
   if (!ip) {
-    return res
+    res
       .status(400)
       .json({ message: "Bad Request." });
+      return;
   }
 
   const repo = getChatRoomRepository();
