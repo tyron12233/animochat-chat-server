@@ -12,7 +12,7 @@ export const CHAT_SERVER_PORT = process.env.PORT
 
 export const DISCOVERY_SERVER_URL =
   process.env.DISCOVERY_SERVER_URL ||
-  "https://animochat-service-discovery.onrender.com";
+  "https://animochat-service-discovery-6jj5.onrender.com/services";
 export const SERVICE_NAME = "chat-service";
 export const SERVICE_VERSION = "1.0.0";
 export const SERVICE_URL =
