@@ -12,10 +12,7 @@ export default async function checkIpBan(
   const ip = req.ip;
 
   if (!ip) {
-    res
-      .status(400)
-      .json({ message: "Bad Request." });
-      return;
+    throw new Error("IP address not found in request");
   }
 
   const repo = getChatRoomRepository();

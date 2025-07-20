@@ -40,6 +40,8 @@ await initialize();
 app.use(checkIpBan);
 app.use(limiter);
 
+app.set("trust proxy", true); 
+
 // Define the WebSocket route
 app.ws("/", checkIpBan, (ws, req) => {
   // express-ws provides query params directly on the request object
