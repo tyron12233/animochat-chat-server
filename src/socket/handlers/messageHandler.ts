@@ -40,6 +40,8 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
     senderNickname: message.senderNickname ?? (await roomRepo.getNickname(chatId, userId) ?? "Anonymous"),
   };
 
+
+  const isReplyingToJulie = (message as any)?.replyingTo === "julie-ai"; 
   if ((message as any).mentions && (message as any).mentions.length > 0) {
     const mentions: Mention[] = (message as any).mentions;
     const mentionIds = mentions.map((mention) => mention.id);
@@ -49,6 +51,10 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
         console.error("Error handling AI mention:", err);
       });
     }
+  } else if (isReplyingToJulie) {
+    onAiMentioned(chatId, message).catch((err) => {
+      console.error("Error handling AI mention:", err);
+    });
   }
 
   await roomRepo.addMessage(chatId, newMessage);
