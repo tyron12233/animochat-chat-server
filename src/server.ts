@@ -25,8 +25,6 @@ const { app, getWss, applyTo } = expressWs(express());
 // Apply express-ws middleware
 expressWs(app);
 
-app.set("trust proxy", true);
-
 app.use(
   cors({
     credentials: true,
