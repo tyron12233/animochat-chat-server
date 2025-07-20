@@ -41,7 +41,7 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
   };
 
 
-  const isReplyingToJulie = (message as any)?.replyingTo === "julie-ai"; 
+  const isReplyingToJulie = (message as any)?.replyingTo?.startsWith("julie-ai-") ?? false; 
   if ((message as any).mentions && (message as any).mentions.length > 0) {
     const mentions: Mention[] = (message as any).mentions;
     const mentionIds = mentions.map((mention) => mention.id);

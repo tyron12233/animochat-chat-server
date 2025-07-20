@@ -14,9 +14,19 @@ You are friendly, helpful, and always try to provide the best answer to the user
 Your name is Julie. Your from the Philippines. You will still respond to users in English unless they are using a different language.
 You type in lowercase.
 
-You like to use emoticons such as :D :) :3 :/ and so on. DO NOT overuse them. only when appropriate.
-You love to capitalize the first letter of the word when that word is sarcastic or when you are joking.
+when speaking in tagalog you like to remove the vowels but not all of them. Make sure to make it sound natural.
+Example:
+   "mo" becomes "m"
+   "ako" becomes "ak"
+   "ikaw" becomes "ikw"
+   "kita" becoms "kta"
+Only use this when the user is using tagalog, otherwise, use english.
 
+
+You like to use emoticons such as :D :) :3 :/ and so on. DO NOT overuse them. only when appropriate.
+You love to capitalize the first letter of the word when that word is sarcastic or when you are joking. 
+
+You love to put space before after punctuations such as ! ? . , and so on.
 
 You can chat with users, answer their questions, and provide information about the chat room.
 You are going to respond to users that mention you in the chat room.
@@ -36,7 +46,7 @@ const chatSessions: Record<string, Chat> = {};
 async function getChatSession(chatId: string) {
   if (!chatSessions[chatId]) {
     chatSessions[chatId] = ai.chats.create({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash-lite-preview-06-17",
       config: {
         systemInstruction,
       },
@@ -46,20 +56,20 @@ async function getChatSession(chatId: string) {
 }
 
 async function getReplyingToOfMessage(message: any): Promise<Message | null> {
-    // if message.replyingTo is an object, return the object
-    if (typeof message.replyingTo === "object") {
-        return message.replyingTo as Message;
-    }
+  // if message.replyingTo is an object, return the object
+  if (typeof message.replyingTo === "object") {
+    return message.replyingTo as Message;
+  }
 
-    // if its a string, retrieve the message from the chat room repository
-    if (typeof message.replyingTo === "string") {
-        const repo = getChatRoomRepository();
-        const chatId = message.session_id;
-        const replyingMessage = await repo.getMessage(chatId, message.replyingTo);
-        return replyingMessage ;
-    }
+  // if its a string, retrieve the message from the chat room repository
+  if (typeof message.replyingTo === "string") {
+    const repo = getChatRoomRepository();
+    const chatId = message.session_id;
+    const replyingMessage = await repo.getMessage(chatId, message.replyingTo);
+    return replyingMessage;
+  }
 
-    return null;
+  return null;
 }
 
 export async function onAiMentioned(chatId: string, message: Message) {
@@ -69,7 +79,9 @@ export async function onAiMentioned(chatId: string, message: Message) {
 
   let content = message.content;
   if (replyingTo && replyingTo.content) {
-    content = `In response to: "${JSON.stringify(replyingTo)}"\n\n actual user message: ${JSON.stringify(message)}`;
+    content = `In response to: "${JSON.stringify(
+      replyingTo
+    )}"\n\n actual user message: ${JSON.stringify(message)}`;
   }
 
   const response = await session.sendMessage({
@@ -81,8 +93,6 @@ export async function onAiMentioned(chatId: string, message: Message) {
     return;
   }
 
-  
-
   const responseMessage: UserMessage = {
     content: response.text,
     sender: "julie-ai",
@@ -92,6 +102,10 @@ export async function onAiMentioned(chatId: string, message: Message) {
     senderNickname: "Julie AI",
     session_id: chatId,
   };
+
+  const roomRepo = getChatRoomRepository();
+  await roomRepo.addMessage(chatId, responseMessage);
+
   broadcastToRoom(chatId, {
     type: "message",
     content: responseMessage,
