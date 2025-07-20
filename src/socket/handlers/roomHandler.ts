@@ -5,6 +5,7 @@ import { getChatRoomRepository } from "../../config/redis";
 import { broadcastToRoom } from "../broadcast";
 import { generateUserFriendlyName } from "../../util";
 import type { ChatThemeV2, OfflinePacket } from "../../types";
+import { BANNED_ROOM_CODE, ROOM_FULL_CODE } from "../../config/errors";
 
 async function isUserBanned(
   chatId: string,
@@ -79,7 +80,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   }
 
   if (await isUserBanned(chatId, userId, ipAddress)) {
-    ws.close(3010, "You are banned from this room.");
+    ws.close(BANNED_ROOM_CODE, "You are banned from this room.");
     throw new Error(`User ${userId} is banned from room ${chatId}.`);
   }
   const roomInfo = await repo.getRoomInfo(chatId);
@@ -89,7 +90,7 @@ export async function handleUserConnected(ws: ChatWebSocket) {
   const onlineCount = userStore.getOnlineUsersInRoom(chatId).length;
   const maxParticipants = roomInfo.max_participants ?? 2;
   if (onlineCount >= maxParticipants && !isGhost) {
-    ws.close(3020, "Room is full.");
+    ws.close(ROOM_FULL_CODE, "Room is full.");
     throw new Error(`Room ${chatId} is full.`);
   }
 

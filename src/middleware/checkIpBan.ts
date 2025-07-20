@@ -2,6 +2,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { getChatRoomRepository } from "../config/redis";
 
+console.log("checkIpBan middleware loaded");
+
 export default async function checkIpBan(
   req: any,
   res: any,
@@ -10,10 +12,9 @@ export default async function checkIpBan(
   const ip = req.ip;
 
   if (!ip) {
-    // This case is unlikely if 'trust proxy' is configured, but as a safeguard,
-    // we'll log a warning and allow the request to proceed.
-    console.warn("Could not determine IP address for an incoming request.");
-    return next();
+    return res
+      .status(400)
+      .json({ message: "Bad Request." });
   }
 
   const repo = getChatRoomRepository();
@@ -24,12 +25,12 @@ export default async function checkIpBan(
       // If the IP is banned, send a 403 Forbidden response and stop processing.
       return res
         .status(403)
-        .json({ message: "Access from your IP address has been restricted." });
+        .json({ message: "Access denied." });
     }
 
     return next();
   } catch (error) {
-    console.error("Redis error while checking IP ban status:", error);
+    console.error("Error while checking IP ban status:", error);
     return next();
   }
 }

@@ -9,19 +9,14 @@ import type {
 } from "../../types";
 import { broadcastToRoom } from "../broadcast";
 
-const nonText = ['image', 'voice_message']
-const textMessages = ['user', 'text']
+const nonText = ["image", "voice_message"];
+const textMessages = ["user", "text"];
 
 function isTextMessage(type: string) {
   return textMessages.includes(type) && !nonText.includes(type);
 }
 
 export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
-
-  if (isTextMessage(message.type ?? "text")) {
-    message.content = message?.content?.slice(0, 700);
-  } 
-
   const { chatId, userId } = ws;
 
   if (!chatId || !userId) {
@@ -33,20 +28,24 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
 
   const roomRepo = getChatRoomRepository();
 
-  if (!message.senderNickname) {
-    // If the message does not have a senderNickname, fetch it
-    message.senderNickname =
-      (await roomRepo.getNickname(chatId, userId)) ?? "Unknown User";
+  let content = message.content;
+  if (isTextMessage(message.type ?? "text")) {
+    content = content?.slice(0, 700);
   }
+  let newMessage: Message = {
+    ...message,
+    content,
+    senderNickname: message.senderNickname ?? (await roomRepo.getNickname(chatId, userId) ?? "Anonymous"),
+  };
 
-  await roomRepo.addMessage(chatId, message);
+  await roomRepo.addMessage(chatId, newMessage);
 
   // send acknowledgment to the sender
   ws.send(
     JSON.stringify({
       type: "message_acknowledgment",
       content: {
-        messageId: message.id,
+        messageId: newMessage.id,
         sender: "system",
       },
     } as MessageAcknowledgmentPacket)
@@ -54,15 +53,11 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
 
   const packet: MessagePacket = {
     type: "message",
-    content: message,
+    content: newMessage,
     sender: userId,
   };
 
-  broadcastToRoom(
-    chatId,
-    packet,
-    ws 
-  );
+  broadcastToRoom(chatId, packet, ws);
 }
 
 export async function handleReaction(ws: ChatWebSocket, reaction: Reaction) {
@@ -74,8 +69,7 @@ export async function handleReaction(ws: ChatWebSocket, reaction: Reaction) {
 
   const anyReaction: any = reaction;
   if (anyReaction.nickname === undefined || anyReaction.nickname === null) {
-    anyReaction.nickname =
-      (await roomRepo.getNickname(chatId, userId));
+    anyReaction.nickname = await roomRepo.getNickname(chatId, userId);
   }
 
   broadcastToRoom(
@@ -161,14 +155,11 @@ export async function handleChangeNickname(
     session_id: chatId,
     id: `nickname-change-${Date.now()}`,
   };
-  broadcastToRoom(
-    chatId,
-    {
-      type: "message",
-      content: systemMessage,
-      sender: "system",
-    } as MessagePacket
-  );
+  broadcastToRoom(chatId, {
+    type: "message",
+    content: systemMessage,
+    sender: "system",
+  } as MessagePacket);
 
   broadcastToRoom(chatId, {
     type: "change_nickname",

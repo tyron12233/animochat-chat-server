@@ -48,19 +48,19 @@ const packetHandlers: Record<string, PacketHandler> = {
   music_finished: handleMusicFinished,
 };
 
-const rateLimiter = new RateLimiterMemory({
+export const rateLimiter = new RateLimiterMemory({
   points: 5, 
   duration: 1, // per second
 });
 
 export async function onConnection(ws: ChatWebSocket, req: Request) {
   if (!ws.ipAddress) {
-    // If the WebSocket does not have an IP address, we cannot proceed
     console.error(
       "WebSocket connection without IP address.",
       ws.chatId,
       ws.userId
     );
+    ws.close(4000, "Bad Request");
     return;
   }
   try {
@@ -70,26 +70,23 @@ export async function onConnection(ws: ChatWebSocket, req: Request) {
     return;
   }
 
-  const isBanned = await getChatRoomRepository().isIpBanned(
-    ws.chatId,
-    ws.userId
-  );
-  if (isBanned) {
-    ws.send(JSON.stringify({ error: "You are banned from this chat." }));
-    ws.close(4000, "Banned");
-    return;
-  }
-
   ws.on("message", async (data: Buffer) => {
     if (!ws.ipAddress) {
         ws.close();
-        return
+        return;
     }
+
     try {
-        await rateLimiter.consume(ws.ipAddress);
+      console.log("Consuming rate limit for user:", ws.userId);
+      await rateLimiter.consume(ws.userId, 1);
+    } catch (error) {
+      console.warn("Rate limit exceeded for user:", ws.userId);
+      ws.send(JSON.stringify({ type: "error", content: "Rate limit exceeded" }));
+      return;
+    }
 
-
-      const message: Packet<any, any> = JSON.parse(data.toString());
+    try {
+      let message: Packet<any, any> = JSON.parse(data.toString());
       const handler = packetHandlers[message.type];
 
       const isBanned = await getChatRoomRepository().isIpBanned(
