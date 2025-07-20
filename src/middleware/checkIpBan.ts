@@ -9,13 +9,10 @@ export default async function checkIpBan(
   res: any,
   next: NextFunction
 ) {
-  if (!res) {
-    return;
-  }
   const ip = req.ip;
 
   if (!ip) {
-    throw new Error("IP address not found in request");
+    return next();
   }
 
   const repo = getChatRoomRepository();
