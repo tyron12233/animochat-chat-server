@@ -19,6 +19,7 @@
     "start": "npx tsx src/index.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.10.0",
     "@supabase/supabase-js": "^2.50.5",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",

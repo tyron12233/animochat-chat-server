@@ -24,6 +24,10 @@ export interface IChatRoomRepository {
   getAllRoomIds(): Promise<string[]>;
 
   // --- Message Management ---
+  getMessage(
+    chatId: string,
+    messageId: string
+  ): Promise<Message | null>;
   updateReaction(chatId: string, reaction: Reaction): Promise<boolean>;
   markMessageAsDeleted(chatId: string, messageId: string): Promise<boolean>;
   deleteAllMessagesBy(chatId: string, sender: string): Promise<void>;

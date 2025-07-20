@@ -1,6 +1,7 @@
 import type { ChatWebSocket } from "../../chat-room";
 import { getChatRoomRepository } from "../../config/redis";
 import type {
+  Mention,
   Message,
   MessageAcknowledgmentPacket,
   MessagePacket,
@@ -8,6 +9,7 @@ import type {
   SystemMessage,
 } from "../../types";
 import { broadcastToRoom } from "../broadcast";
+import { onAiMentioned } from "./gemini/geminiHandler";
 
 const nonText = ["image", "voice_message"];
 const textMessages = ["user", "text"];
@@ -37,6 +39,17 @@ export async function handleSendMessage(ws: ChatWebSocket, message: Message) {
     content,
     senderNickname: message.senderNickname ?? (await roomRepo.getNickname(chatId, userId) ?? "Anonymous"),
   };
+
+  if ((message as any).mentions && (message as any).mentions.length > 0) {
+    const mentions: Mention[] = (message as any).mentions;
+    const mentionIds = mentions.map((mention) => mention.id);
+    const hasJulie = mentionIds.includes("julie-ai");
+    if (hasJulie) {
+      onAiMentioned(chatId, message).catch((err) => {
+        console.error("Error handling AI mention:", err);
+      });
+    }
+  }
 
   await roomRepo.addMessage(chatId, newMessage);
 

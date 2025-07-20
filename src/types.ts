@@ -48,6 +48,14 @@ export interface UserMessage extends BaseMessage {
   sender: string; // peerId
   replyingTo?: string;
   reactions?: Reaction[];
+  mentions?: Mention[];
+}
+
+
+export interface Mention {
+  id: string;
+  startIndex: number;
+  endIndex: number;
 }
 
 export type Message = UserMessage | SystemMessage;

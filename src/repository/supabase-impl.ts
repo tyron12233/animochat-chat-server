@@ -228,6 +228,20 @@ export class SupabaseChatRoomRepository implements IChatRoomRepository {
     this.handleError(error, "addMessage");
   }
 
+  async getMessage(
+    chatId: string,
+    messageId: string
+  ): Promise<Message | null> {
+    const { data, error } = await this.supabase
+      .from("messages")
+      .select("*")
+      .eq("id", messageId)
+      .eq("room_id", chatId)
+      .single();
+    this.handleError(error, "getMessage");
+    return data || null;
+  }
+
   async getMessages(
     chatId: string,
     start: number,
