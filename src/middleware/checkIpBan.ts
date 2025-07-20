@@ -9,6 +9,9 @@ export default async function checkIpBan(
   res: any,
   next: NextFunction
 ) {
+  if (!res) {
+    return;
+  }
   const ip = req.ip;
 
   if (!ip) {
