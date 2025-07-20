@@ -84,12 +84,14 @@ export async function handleUserConnected(ws: ChatWebSocket) {
     throw new Error(`User ${userId} is banned from room ${chatId}.`);
   }
   const roomInfo = await repo.getRoomInfo(chatId);
-
+  const maxParticipants = roomInfo.max_participants ?? 2;
   const isGhost = await repo.isGhostMode(chatId, userId);
 
-  const onlineCount = userStore.getOnlineUsersInRoom(chatId).length;
-  const maxParticipants = roomInfo.max_participants ?? 2;
-  if (onlineCount >= maxParticipants && !isGhost) {
+  const userIds = new Set(
+    userStore.getOnlineUsersInRoom(chatId).map((u) => u.id)
+  );
+
+  if (!userIds.has(userId) && userIds.size >= maxParticipants && !isGhost) {
     ws.close(ROOM_FULL_CODE, "Room is full.");
     throw new Error(`Room ${chatId} is full.`);
   }
