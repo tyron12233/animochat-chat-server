@@ -77,7 +77,6 @@ export async function onConnection(ws: ChatWebSocket, req: Request) {
     }
 
     try {
-      console.log("Consuming rate limit for user:", ws.userId);
       await rateLimiter.consume(ws.userId, 1);
     } catch (error) {
       console.warn("Rate limit exceeded for user:", ws.userId);
